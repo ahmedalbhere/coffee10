@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>نظام طلبات الكافيه</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
@@ -23,28 +23,17 @@
           <div id="scanner"></div>
           <div class="scanner-overlay">
             <div class="scanner-frame"></div>
-            <p class="scanner-guide">
-              ضع باركود الطاولة داخل الإطار<br>
-              تأكد من إضاءة جيدة وثبات الجهاز
-            </p>
+            <p class="scanner-guide">ضع باركود الطاولة داخل الإطار</p>
           </div>
         </div>
         <div class="fallback-input" style="display:none;">
           <p>في حالة عدم عمل الماسح الضوئي:</p>
           <div class="input-group">
-            <input type="number" id="tableNumber" placeholder="أدخل رقم الطاولة يدويًا" min="1" inputmode="numeric">
+            <input type="number" id="tableNumber" placeholder="أدخل رقم الطاولة يدويًا" min="1">
             <button onclick="enterTableManually()" class="btn-secondary">
               <i class="fas fa-keyboard"></i> إدخال يدوي
             </button>
           </div>
-        </div>
-        <div class="scanner-tips">
-          <p><i class="fas fa-lightbulb"></i> نصائح للمسح الناجح:</p>
-          <ul>
-            <li>تأكد من وجود إضاءة كافية</li>
-            <li>حافظ على ثبات الجهاز أثناء المسح</li>
-            <li>اجعل الباركود في منتصف الإطار</li>
-          </ul>
         </div>
       </div>
 
