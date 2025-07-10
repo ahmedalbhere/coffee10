@@ -199,6 +199,7 @@ button {
   border-radius: var(--border-radius);
   overflow: hidden;
   background-color: #000;
+  min-height: 300px;
 }
 
 #scanner {
@@ -219,14 +220,22 @@ button {
   justify-content: center;
   align-items: center;
   pointer-events: none;
+  z-index: 1;
 }
 
 .scanner-frame {
-  width: 70%;
-  height: 200px;
-  border: 3px dashed var(--primary-color);
+  width: 80%;
+  height: 250px;
+  border: 4px dashed rgba(233, 30, 99, 0.7);
   border-radius: var(--border-radius);
   margin-bottom: 1.5rem;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { border-color: rgba(233, 30, 99, 0.7); }
+  50% { border-color: rgba(233, 30, 99, 0.3); }
+  100% { border-color: rgba(233, 30, 99, 0.7); }
 }
 
 .scanner-guide {
@@ -235,6 +244,8 @@ button {
   padding: 0.8rem 1.5rem;
   border-radius: var(--border-radius);
   font-size: 1.1rem;
+  text-align: center;
+  max-width: 80%;
 }
 
 .fallback-input {
@@ -244,6 +255,29 @@ button {
 .fallback-input p {
   margin-bottom: 1rem;
   font-size: 1.1rem;
+}
+
+.scanner-tips {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: var(--border-radius);
+}
+
+.scanner-tips p {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.scanner-tips ul {
+  padding-right: 1.5rem;
+}
+
+.scanner-tips li {
+  margin-bottom: 0.3rem;
 }
 
 /* قائمة الطعام */
@@ -422,8 +456,8 @@ button {
   }
   
   .scanner-frame {
-    width: 80%;
-    height: 150px;
+    width: 90%;
+    height: 200px;
   }
   
   .card {
@@ -453,4 +487,31 @@ button {
   .qty-btn:active {
     transform: scale(0.95);
   }
+}
+
+/* أنماط خاصة بالماسح الضوئي */
+#html5-qrcode-button-camera-change,
+#html5-qrcode-button-torch {
+  position: absolute;
+  bottom: 20px;
+  z-index: 2;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius);
+  font-size: 0.9rem;
+}
+
+#html5-qrcode-button-camera-change {
+  right: 20px;
+}
+
+#html5-qrcode-button-torch {
+  left: 20px;
+  background-color: var(--secondary-color);
+}
+
+#html5-qrcode-anchor-scan-type-change {
+  display: none !important;
 }
