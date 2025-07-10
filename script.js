@@ -7,28 +7,45 @@ const db = firebase.database();
 
 let currentTable = null;
 let scanner = null;
+let isScannerActive = false;
 
 // تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
 
 // تهيئة ماسح الباركود
 function initializeScanner() {
-  scanner = new Html5QrcodeScanner("scanner", {
-    fps: 10,
-    qrbox: 250,
-    aspectRatio: 1.0,
-    disableFlip: false
-  });
+  if (isScannerActive) return;
+  
+  try {
+    scanner = new Html5QrcodeScanner("scanner", {
+      fps: 10,
+      qrbox: 250,
+      aspectRatio: 1.0,
+      disableFlip: false
+    });
 
-  scanner.render(
-    (tableNumber) => {
-      handleTableScanned(tableNumber);
-    },
-    (error) => {
-      console.error("خطأ في المسح:", error);
+    const successCallback = (tableNumber) => {
+      isScannerActive = false;
+      scanner.clear().then(() => {
+        console.log("QR Scanner stopped successfully");
+        handleTableScanned(tableNumber);
+      }).catch(err => {
+        console.error("Failed to stop scanner", err);
+        handleTableScanned(tableNumber);
+      });
+    };
+
+    const errorCallback = (error) => {
+      console.error("QR Scanner error:", error);
       document.querySelector('.fallback-input').style.display = 'block';
-    }
-  );
+    };
+
+    scanner.render(successCallback, errorCallback);
+    isScannerActive = true;
+  } catch (error) {
+    console.error("Scanner initialization error:", error);
+    document.querySelector('.fallback-input').style.display = 'block';
+  }
 }
 
 function handleTableScanned(tableNumber) {
@@ -41,6 +58,7 @@ function handleTableScanned(tableNumber) {
   document.getElementById('table-input').style.display = 'none';
   document.getElementById('menu').style.display = 'block';
   document.getElementById('scanned-table-number').textContent = tableNumber;
+  
   loadMenu();
 }
 
@@ -71,26 +89,27 @@ function loadMenu() {
     
     for (let key in items) {
       const item = items[key];
-      itemsDiv.innerHTML += `
-        <div class="menu-item">
-          <div class="item-info">
-            <h3>${item.name}</h3>
-            <div class="item-price">${item.price} جنيه</div>
+      const itemElement = document.createElement('div');
+      itemElement.className = 'menu-item';
+      itemElement.innerHTML = `
+        <div class="item-info">
+          <h3>${item.name}</h3>
+          <div class="item-price">${item.price} جنيه</div>
+        </div>
+        <div class="item-controls">
+          <div class="quantity-selector">
+            <button onclick="decrementQuantity('${key}')" class="qty-btn">
+              <i class="fas fa-minus"></i>
+            </button>
+            <span id="qty-value-${key}" class="qty-value">0</span>
+            <button onclick="incrementQuantity('${key}')" class="qty-btn">
+              <i class="fas fa-plus"></i>
+            </button>
           </div>
-          <div class="item-controls">
-            <div class="quantity-selector">
-              <button onclick="decrementQuantity('${key}')" class="qty-btn">
-                <i class="fas fa-minus"></i>
-              </button>
-              <span id="qty-value-${key}" class="qty-value">0</span>
-              <button onclick="incrementQuantity('${key}')" class="qty-btn">
-                <i class="fas fa-plus"></i>
-              </button>
-            </div>
-            <textarea id="note-${key}" placeholder="ملاحظات خاصة"></textarea>
-          </div>
+          <textarea id="note-${key}" class="item-note" placeholder="ملاحظات خاصة"></textarea>
         </div>
       `;
+      itemsDiv.appendChild(itemElement);
     }
   });
 }
@@ -170,13 +189,18 @@ function showOrderSummary(order) {
 }
 
 function goBack() {
-  if (scanner) {
-    scanner.clear().catch(error => console.error("Failed to clear scanner", error));
-  }
   document.getElementById('menu').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   document.querySelector('.fallback-input').style.display = 'none';
   currentTable = null;
+  
+  if (scanner) {
+    scanner.clear().catch(error => {
+      console.error("Failed to clear scanner", error);
+    });
+    scanner = null;
+  }
+  isScannerActive = false;
   initializeScanner();
 }
 
@@ -184,8 +208,25 @@ function newOrder() {
   document.getElementById('order-summary').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   currentTable = null;
+  
+  if (scanner) {
+    scanner.clear().catch(error => {
+      console.error("Failed to clear scanner", error);
+    });
+    scanner = null;
+  }
+  isScannerActive = false;
   initializeScanner();
 }
 
 // تهيئة الماسح عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', initializeScanner);
+document.addEventListener('DOMContentLoaded', () => {
+  initializeScanner();
+  
+  // إضافة حدث لزر الإدخال اليدوي
+  document.getElementById('tableNumber').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      enterTableManually();
+    }
+  });
+});
