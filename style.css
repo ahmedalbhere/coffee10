@@ -621,3 +621,29 @@ button {
     font-size: 1.1rem;
   }
 }
+/* أضف هذا في ملف style.css */
+
+.menu-grid {
+  -webkit-overflow-scrolling: touch; /* لتحسين التمرير على iOS */
+  overflow-scrolling: touch;
+  overscroll-behavior: contain; /* لمنع تأثير "الارتداد" الزائد */
+  scroll-behavior: smooth; /* لجعل التمرير أكثر سلاسة */
+}
+
+.menu-item {
+  touch-action: manipulation; /* تحسين الاستجابة للمس */
+}
+
+/* تحسين أداء التمرير */
+.menu-grid, .menu-items-grid {
+  will-change: transform;
+  backface-visibility: hidden;
+  perspective: 1000px;
+  transform: translate3d(0,0,0);
+}
+
+/* إصلاح مشكلة القطع أثناء التمرير */
+.order-items, .menu-grid {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
