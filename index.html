@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام طلبات الكافيه</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header class="main-header">
+      <h1><i class="fas fa-coffee"></i> نظام طلبات الكافيه</h1>
+      <p>اسحب باركود الطاولة لبدء الطلب</p>
+    </header>
+
+    <main>
+      <div id="table-input" class="card">
+        <h2><i class="fas fa-qrcode"></i> مسح باركود الطاولة</h2>
+        <div class="scanner-container">
+          <div id="scanner"></div>
+          <div class="scanner-overlay">
+            <div class="scanner-frame"></div>
+            <p class="scanner-guide">ضع باركود الطاولة داخل الإطار</p>
+          </div>
+        </div>
+        <div class="fallback-input" style="display:none;">
+          <p>في حالة عدم عمل الماسح الضوئي:</p>
+          <div class="input-group">
+            <input type="number" id="tableNumber" placeholder="أدخل رقم الطاولة يدويًا" min="1">
+            <button onclick="enterTableManually()" class="btn-secondary">
+              <i class="fas fa-keyboard"></i> إدخال يدوي
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="menu" class="card" style="display:none;">
+        <div class="menu-header">
+          <h2><i class="fas fa-book-open"></i> قائمة المنيو</h2>
+          <div class="scanned-table-info">
+            <i class="fas fa-table"></i>
+            <span id="scanned-table-number"></span>
+            <button onclick="goBack()" class="btn-secondary">
+              <i class="fas fa-arrow-left"></i> تغيير الطاولة
+            </button>
+          </div>
+        </div>
+        <div id="menu-items" class="menu-grid"></div>
+        <button onclick="submitOrder()" class="btn-primary btn-large">
+          <i class="fas fa-paper-plane"></i> تأكيد الطلب
+        </button>
+      </div>
+
+      <div id="order-summary" class="card" style="display:none;">
+        <div class="success-icon">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h2>شكراً لطلبك!</h2>
+        <p>تم استلام طلبك بنجاح وسيتم تحضيره قريباً</p>
+        <div class="order-details">
+          <p><strong>رقم الطاولة:</strong> <span id="summary-table"></span></p>
+          <div id="summary-items"></div>
+        </div>
+        <button onclick="newOrder()" class="btn-primary">
+          <i class="fas fa-plus"></i> طلب جديد
+        </button>
+      </div>
+    </main>
+
+    <footer>
+      <p>نظام طلبات الكافيه &copy; <span id="year"></span></p>
+    </footer>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
