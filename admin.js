@@ -18,33 +18,121 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // التحقق من تسجيل الدخول السابق
   if (localStorage.getItem('adminLoggedIn') === 'true') {
-    loginSection.style.display = 'none';
-    adminPanel.style.display = 'block';
-    loadData();
+    checkAdminPassword().then(isAuthenticated => {
+      if (isAuthenticated) {
+        loginSection.style.display = 'none';
+        adminPanel.style.display = 'block';
+        loadData();
+      } else {
+        localStorage.removeItem('adminLoggedIn');
+      }
+    });
   }
 });
 
+// التحقق من كلمة مرور المسؤول
+async function checkAdminPassword() {
+  try {
+    const snapshot = await db.ref("admin/password").once("value");
+    const savedPass = snapshot.val();
+    const sessionPass = sessionStorage.getItem('adminTempPass');
+    
+    // إذا لم تكن هناك كلمة مرور محفوظة، استخدم الافتراضية "4321"
+    if (!savedPass && sessionPass === "4321") return true;
+    if (savedPass === sessionPass) return true;
+    
+    return false;
+  } catch (error) {
+    console.error("Error checking password:", error);
+    return false;
+  }
+}
+
 // تسجيل الدخول
-function login() {
-  const pass = document.getElementById('admin-pass').value;
+async function login() {
+  const pass = document.getElementById('admin-pass').value.trim();
   
-  if (pass === "4321") {
-    loginSection.style.display = 'none';
-    adminPanel.style.display = 'block';
-    localStorage.setItem('adminLoggedIn', 'true');
-    loadData();
-  } else {
-    alert("كلمة المرور غير صحيحة");
-    document.getElementById('admin-pass').value = '';
+  if (!pass) {
+    alert("الرجاء إدخال كلمة المرور");
+    return;
+  }
+
+  try {
+    const snapshot = await db.ref("admin/password").once("value");
+    const savedPass = snapshot.val() || "4321"; // القيمة الافتراضية
+    
+    if (pass === savedPass) {
+      // تخزين مؤقت في sessionStorage (أكثر أماناً من localStorage)
+      sessionStorage.setItem('adminTempPass', pass);
+      localStorage.setItem('adminLoggedIn', 'true');
+      
+      loginSection.style.display = 'none';
+      adminPanel.style.display = 'block';
+      loadData();
+    } else {
+      alert("كلمة المرور غير صحيحة");
+      document.getElementById('admin-pass').value = '';
+    }
+  } catch (error) {
+    console.error("Login error:", error);
+    alert("حدث خطأ أثناء تسجيل الدخول");
   }
 }
 
 // تسجيل الخروج
 function logout() {
   if (confirm("هل تريد تسجيل الخروج من لوحة التحكم؟")) {
+    sessionStorage.removeItem('adminTempPass');
     localStorage.removeItem('adminLoggedIn');
     loginSection.style.display = 'block';
     adminPanel.style.display = 'none';
+  }
+}
+
+// تغيير كلمة المرور
+async function changePassword() {
+  const currentPass = document.getElementById('current-pass').value.trim();
+  const newPass = document.getElementById('new-pass').value.trim();
+  const confirmPass = document.getElementById('confirm-pass').value.trim();
+  
+  if (!currentPass || !newPass || !confirmPass) {
+    alert("الرجاء ملء جميع الحقول");
+    return;
+  }
+  
+  if (newPass.length < 4) {
+    alert("كلمة المرور الجديدة يجب أن تكون 4 أحرف على الأقل");
+    return;
+  }
+  
+  if (newPass !== confirmPass) {
+    alert("كلمتا المرور الجديدتان غير متطابقتين");
+    return;
+  }
+
+  try {
+    const snapshot = await db.ref("admin/password").once("value");
+    const savedPass = snapshot.val() || "4321"; // القيمة الافتراضية
+    
+    if (currentPass !== savedPass) {
+      alert("كلمة المرور الحالية غير صحيحة");
+      return;
+    }
+    
+    await db.ref("admin").update({ password: newPass });
+    
+    // تحديث كلمة المرور في الجلسة الحالية
+    sessionStorage.setItem('adminTempPass', newPass);
+    
+    // مسح الحقول وإظهار رسالة النجاح
+    document.getElementById('current-pass').value = '';
+    document.getElementById('new-pass').value = '';
+    document.getElementById('confirm-pass').value = '';
+    
+    alert("تم تغيير كلمة المرور بنجاح");
+  } catch (error) {
+    console.error("Error changing password:", error);
+    alert("حدث خطأ أثناء تغيير كلمة المرور");
   }
 }
 
@@ -196,7 +284,7 @@ function createMenuItemElement(key, item) {
 }
 
 // إضافة صنف جديد
-function addMenuItem() {
+async function addMenuItem() {
   const name = document.getElementById('newItem').value.trim();
   const price = document.getElementById('newPrice').value;
   
@@ -210,37 +298,53 @@ function addMenuItem() {
     return;
   }
   
-  db.ref("menu").push({
-    name: name,
-    price: parseFloat(price).toFixed(2)
-  }).then(() => {
+  try {
+    await db.ref("menu").push({
+      name: name,
+      price: parseFloat(price).toFixed(2)
+    });
+    
     document.getElementById('newItem').value = '';
     document.getElementById('newPrice').value = '';
     document.getElementById('newItem').focus();
-  });
+  } catch (error) {
+    console.error("Error adding menu item:", error);
+    alert("حدث خطأ أثناء إضافة الصنف");
+  }
 }
 
 // تمييز الطلب كمكتمل
-function completeOrder(orderId) {
+async function completeOrder(orderId) {
   if (confirm("هل تريد تمييز هذا الطلب كمكتمل؟")) {
-    db.ref(`orders/${orderId}`).update({
-      status: "completed",
-      completedAt: firebase.database.ServerValue.TIMESTAMP
-    });
+    try {
+      await db.ref(`orders/${orderId}`).update({
+        status: "completed",
+        completedAt: firebase.database.ServerValue.TIMESTAMP
+      });
+    } catch (error) {
+      console.error("Error completing order:", error);
+      alert("حدث خطأ أثناء تحديث حالة الطلب");
+    }
   }
 }
 
 // حذف الطلب
-function deleteOrder(orderId) {
+async function deleteOrder(orderId) {
   if (confirm("هل أنت متأكد من حذف هذا الطلب؟")) {
-    db.ref(`orders/${orderId}`).remove();
+    try {
+      await db.ref(`orders/${orderId}`).remove();
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      alert("حدث خطأ أثناء حذف الطلب");
+    }
   }
 }
 
 // حذف جميع الطلبات المكتملة
-function clearCompleted() {
+async function clearCompleted() {
   if (confirm("هل تريد حذف جميع الطلبات المكتملة؟ هذا الإجراء لا يمكن التراجع عنه.")) {
-    db.ref("orders").once("value").then(snapshot => {
+    try {
+      const snapshot = await db.ref("orders").once("value");
       const orders = snapshot.val();
       const updates = {};
       
@@ -250,15 +354,23 @@ function clearCompleted() {
         }
       }
       
-      db.ref("orders").update(updates);
-    });
+      await db.ref("orders").update(updates);
+    } catch (error) {
+      console.error("Error clearing completed orders:", error);
+      alert("حدث خطأ أثناء حذف الطلبات المكتملة");
+    }
   }
 }
 
 // حذف صنف من القائمة
-function deleteMenuItem(itemId) {
+async function deleteMenuItem(itemId) {
   if (confirm("هل أنت متأكد من حذف هذا الصنف من القائمة؟")) {
-    db.ref(`menu/${itemId}`).remove();
+    try {
+      await db.ref(`menu/${itemId}`).remove();
+    } catch (error) {
+      console.error("Error deleting menu item:", error);
+      alert("حدث خطأ أثناء حذف الصنف");
+    }
   }
 }
 
@@ -290,6 +402,7 @@ function formatTime(timestamp) {
 // تصدير الدوال للوصول إليها من HTML
 window.login = login;
 window.logout = logout;
+window.changePassword = changePassword;
 window.addMenuItem = addMenuItem;
 window.deleteMenuItem = deleteMenuItem;
 window.deleteOrder = deleteOrder;
