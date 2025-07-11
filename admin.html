@@ -28,7 +28,7 @@
     </div>
 
     <!-- لوحة التحكم الرئيسية -->
-    <div id="admin-panel">
+    <div id="admin-panel" style="display: none;">
       <header class="admin-header">
         <h1><i class="fas fa-tachometer-alt"></i> لوحة التحكم</h1>
         <button onclick="logout()" class="btn-logout">
@@ -60,15 +60,37 @@
           <div class="add-item-form">
             <div class="input-group">
               <input type="text" id="newItem" placeholder="اسم الصنف الجديد">
-              <input type="number" id="newPrice" placeholder="السعر بالجنيه" min="1" step="0.5">
-              <button onclick="addMenuItem()" class="btn-add">
-                <i class="fas fa-plus-circle"></i> إضافة صنف
-              </button>
             </div>
+            <div class="input-group">
+              <input type="number" id="newPrice" placeholder="السعر بالجنيه" min="1" step="0.5">
+            </div>
+            <button onclick="addMenuItem()" class="btn-add">
+              <i class="fas fa-plus-circle"></i> إضافة صنف
+            </button>
           </div>
           
           <h3><i class="fas fa-list-ol"></i> الأصناف الحالية</h3>
           <div id="menu-list" class="menu-items-grid"></div>
+        </section>
+
+        <!-- قسم تغيير كلمة المرور -->
+        <section class="admin-section">
+          <h2><i class="fas fa-lock"></i> تغيير كلمة المرور</h2>
+          <div class="input-group">
+            <label for="current-pass"><i class="fas fa-key"></i> كلمة المرور الحالية:</label>
+            <input type="password" id="current-pass" placeholder="أدخل كلمة المرور الحالية">
+          </div>
+          <div class="input-group">
+            <label for="new-pass"><i class="fas fa-key"></i> كلمة المرور الجديدة:</label>
+            <input type="password" id="new-pass" placeholder="أدخل كلمة المرور الجديدة">
+          </div>
+          <div class="input-group">
+            <label for="confirm-pass"><i class="fas fa-key"></i> تأكيد كلمة المرور:</label>
+            <input type="password" id="confirm-pass" placeholder="أعد إدخال كلمة المرور الجديدة">
+          </div>
+          <button onclick="changePassword()" class="btn-primary">
+            <i class="fas fa-sync-alt"></i> تغيير كلمة المرور
+          </button>
         </section>
       </main>
 
