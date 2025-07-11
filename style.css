@@ -273,6 +273,9 @@ button {
   border-radius: var(--border-radius);
   padding: 1.5rem;
   transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .menu-item:hover {
@@ -583,6 +586,44 @@ button {
   font-size: 1.2rem;
 }
 
+/* أنماط إضافية لتغيير كلمة المرور */
+.add-item-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.add-item-form .input-group {
+  margin-bottom: 0;
+}
+
+.menu-item-info {
+  flex-grow: 1;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* تحسينات للواجهة */
+.scanned-table-info {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1.5rem;
+  font-size: 1.2rem;
+}
+
+/* رسائل الخطأ */
+.error-message {
+  color: var(--danger-color);
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
 /* التكيف مع الشاشات الصغيرة */
 @media (max-width: 768px) {
   :root {
@@ -619,5 +660,34 @@ button {
   .btn-primary, .btn-login, .btn-add {
     padding: 0.9rem 1.5rem;
     font-size: 1.1rem;
+  }
+}
+
+/* تحسينات للهواتف */
+@media (max-width: 480px) {
+  .order-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .order-actions button {
+    flex-grow: 1;
+  }
+  
+  .filter-tabs {
+    flex-direction: column;
+  }
+  
+  .filter-tab {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .login-card {
+    margin: 1.5rem auto;
+  }
+  
+  .admin-section {
+    padding: 1.5rem;
   }
 }
