@@ -1,179 +1,72 @@
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT.firebaseio.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-const auth = firebase.auth();
 
 // عناصر واجهة المستخدم
 const loginSection = document.getElementById('login-section');
 const adminPanel = document.getElementById('admin-panel');
 const ordersContainer = document.getElementById('orders');
 const menuListContainer = document.getElementById('menu-list');
-const loginForm = document.getElementById('login-form');
-const logoutBtn = document.getElementById('logout-btn');
 
 // تهيئة الصفحة
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('admin-year').textContent = new Date().getFullYear();
   adminPanel.style.display = 'none';
-  loginSection.style.display = 'block';
   
-  // التحقق من حالة المصادقة
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      checkAdminStatus(user.uid);
-    } else {
-      loginSection.style.display = 'block';
-      adminPanel.style.display = 'none';
-    }
-  });
-
-  // إضافة أحداث النماذج
-  if (loginForm) {
-    loginForm.addEventListener('submit', e => {
-      e.preventDefault();
-      login();
-    });
-  }
-
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', logout);
+  // التحقق من تسجيل الدخول السابق
+  if (localStorage.getItem('adminLoggedIn') === 'true') {
+    loginSection.style.display = 'none';
+    adminPanel.style.display = 'block';
+    loadData();
   }
 });
 
-// التحقق من صلاحية المسؤول
-function checkAdminStatus(uid) {
-  db.ref(`admins/${uid}`).once('value')
-    .then(snapshot => {
-      if (snapshot.exists()) {
-        loginSection.style.display = 'none';
-        adminPanel.style.display = 'block';
-        loadData();
-        startSessionTimer();
-      } else {
-        auth.signOut();
-        alert("ليس لديك صلاحيات الدخول كلوحة تحكم");
-      }
-    })
-    .catch(error => {
-      console.error("Error checking admin status:", error);
-      alert("حدث خطأ أثناء التحقق من الصلاحيات");
-    });
-}
-
 // تسجيل الدخول
 function login() {
-  const email = document.getElementById('admin-email').value;
-  const password = document.getElementById('admin-pass').value;
+  const pass = document.getElementById('admin-pass').value;
   
-  if (!email || !password) {
-    alert("الرجاء إدخال البريد الإلكتروني وكلمة المرور");
-    return;
+  if (pass === "4321") {
+    loginSection.style.display = 'none';
+    adminPanel.style.display = 'block';
+    localStorage.setItem('adminLoggedIn', 'true');
+    loadData();
+  } else {
+    alert("كلمة المرور غير صحيحة");
+    document.getElementById('admin-pass').value = '';
   }
-
-  showLoading(true);
-  
-  auth.signInWithEmailAndPassword(email, password)
-    .then(userCredential => {
-      // يتم التحقق من الصلاحيات في onAuthStateChanged
-    })
-    .catch(error => {
-      showLoading(false);
-      handleLoginError(error);
-    });
-}
-
-// معالجة أخطاء تسجيل الدخول
-function handleLoginError(error) {
-  let errorMessage = "حدث خطأ أثناء تسجيل الدخول";
-  
-  switch (error.code) {
-    case 'auth/invalid-email':
-      errorMessage = "بريد إلكتروني غير صالح";
-      break;
-    case 'auth/user-disabled':
-      errorMessage = "هذا الحساب معطل";
-      break;
-    case 'auth/user-not-found':
-      errorMessage = "لا يوجد حساب بهذا البريد الإلكتروني";
-      break;
-    case 'auth/wrong-password':
-      errorMessage = "كلمة المرور غير صحيحة";
-      break;
-    case 'auth/too-many-requests':
-      errorMessage = "تم تجاوز عدد المحاولات المسموح بها، يرجى المحاولة لاحقاً";
-      break;
-  }
-  
-  alert(errorMessage);
-  document.getElementById('admin-pass').value = '';
 }
 
 // تسجيل الخروج
 function logout() {
   if (confirm("هل تريد تسجيل الخروج من لوحة التحكم؟")) {
-    showLoading(true);
-    auth.signOut()
-      .then(() => {
-        window.location.reload();
-      })
-      .catch(error => {
-        console.error("Logout error:", error);
-        alert("حدث خطأ أثناء تسجيل الخروج");
-      });
+    localStorage.removeItem('adminLoggedIn');
+    loginSection.style.display = 'block';
+    adminPanel.style.display = 'none';
   }
-}
-
-// مؤقت الجلسة (30 دقيقة)
-function startSessionTimer() {
-  let timer;
-  const timeoutDuration = 30 * 60 * 1000; // 30 دقيقة
-  
-  const resetTimer = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      auth.signOut().then(() => {
-        alert("انتهت جلستك بسبب عدم النشاط، يرجى تسجيل الدخول مرة أخرى");
-      });
-    }, timeoutDuration);
-  };
-  
-  // إعادة تعيين المؤقت عند أي نشاط
-  window.onload = resetTimer;
-  window.onmousemove = resetTimer;
-  window.onmousedown = resetTimer;
-  window.ontouchstart = resetTimer;
-  window.onclick = resetTimer;
-  window.onkeypress = resetTimer;
 }
 
 // تحميل البيانات
 function loadData() {
   loadOrders();
   loadMenuList();
-  logAdminActivity("الدخول إلى لوحة التحكم");
 }
 
 // تحميل الطلبات مع إمكانية التصفية
 function loadOrders(filter = 'all') {
-  showLoading(true, ordersContainer);
-  
   db.ref("orders").orderByChild("timestamp").on("value", snapshot => {
     ordersContainer.innerHTML = '';
     const orders = snapshot.val();
     
     if (!orders) {
-      showEmptyState(ordersContainer, "لا توجد طلبات حالياً", "fa-clipboard");
-      showLoading(false);
+      ordersContainer.innerHTML = `
+        <div class="empty-orders">
+          <i class="fas fa-clipboard"></i>
+          <p>لا توجد طلبات حالياً</p>
+        </div>
+      `;
       return;
     }
     
@@ -192,15 +85,13 @@ function loadOrders(filter = 'all') {
     });
     
     if (!hasOrders) {
-      const message = filter === 'pending' ? 'قيد الانتظار' : 'مكتملة';
-      showEmptyState(ordersContainer, `لا توجد طلبات ${message}`, "fa-clipboard");
+      ordersContainer.innerHTML = `
+        <div class="empty-orders">
+          <i class="fas fa-clipboard"></i>
+          <p>لا توجد طلبات ${filter === 'pending' ? 'قيد الانتظار' : 'مكتملة'}</p>
+        </div>
+      `;
     }
-    
-    showLoading(false);
-  }, error => {
-    console.error("Error loading orders:", error);
-    showLoading(false);
-    alert("حدث خطأ أثناء تحميل الطلبات");
   });
 }
 
@@ -265,15 +156,17 @@ function createOrderElement(key, order) {
 
 // تحميل قائمة الطعام
 function loadMenuList() {
-  showLoading(true, menuListContainer);
-  
   db.ref("menu").on("value", snapshot => {
     menuListContainer.innerHTML = '';
     const items = snapshot.val();
     
     if (!items) {
-      showEmptyState(menuListContainer, "لا توجد أصناف في القائمة", "fa-utensils");
-      showLoading(false);
+      menuListContainer.innerHTML = `
+        <div class="empty-menu">
+          <i class="fas fa-utensils"></i>
+          <p>لا توجد أصناف في القائمة</p>
+        </div>
+      `;
       return;
     }
     
@@ -281,12 +174,6 @@ function loadMenuList() {
       const itemElement = createMenuItemElement(key, item);
       menuListContainer.appendChild(itemElement);
     }
-    
-    showLoading(false);
-  }, error => {
-    console.error("Error loading menu:", error);
-    showLoading(false);
-    alert("حدث خطأ أثناء تحميل القائمة");
   });
 }
 
@@ -323,42 +210,22 @@ function addMenuItem() {
     return;
   }
   
-  showLoading(true);
-  
   db.ref("menu").push({
     name: name,
-    price: parseFloat(price).toFixed(2),
-    createdBy: auth.currentUser.uid,
-    createdAt: firebase.database.ServerValue.TIMESTAMP
+    price: parseFloat(price).toFixed(2)
   }).then(() => {
     document.getElementById('newItem').value = '';
     document.getElementById('newPrice').value = '';
     document.getElementById('newItem').focus();
-    logAdminActivity(`إضافة صنف جديد: ${name}`);
-  }).catch(error => {
-    console.error("Error adding menu item:", error);
-    alert("حدث خطأ أثناء إضافة الصنف");
-  }).finally(() => {
-    showLoading(false);
   });
 }
 
 // تمييز الطلب كمكتمل
 function completeOrder(orderId) {
   if (confirm("هل تريد تمييز هذا الطلب كمكتمل؟")) {
-    showLoading(true);
-    
     db.ref(`orders/${orderId}`).update({
       status: "completed",
-      completedBy: auth.currentUser.uid,
       completedAt: firebase.database.ServerValue.TIMESTAMP
-    }).then(() => {
-      logAdminActivity(`تمييز الطلب #${orderId.substring(0, 6)} كمكتمل`);
-    }).catch(error => {
-      console.error("Error completing order:", error);
-      alert("حدث خطأ أثناء تحديث حالة الطلب");
-    }).finally(() => {
-      showLoading(false);
     });
   }
 }
@@ -366,57 +233,24 @@ function completeOrder(orderId) {
 // حذف الطلب
 function deleteOrder(orderId) {
   if (confirm("هل أنت متأكد من حذف هذا الطلب؟")) {
-    showLoading(true);
-    
-    db.ref(`orders/${orderId}`).remove()
-      .then(() => {
-        logAdminActivity(`حذف الطلب #${orderId.substring(0, 6)}`);
-      })
-      .catch(error => {
-        console.error("Error deleting order:", error);
-        alert("حدث خطأ أثناء حذف الطلب");
-      })
-      .finally(() => {
-        showLoading(false);
-      });
+    db.ref(`orders/${orderId}`).remove();
   }
 }
 
 // حذف جميع الطلبات المكتملة
 function clearCompleted() {
   if (confirm("هل تريد حذف جميع الطلبات المكتملة؟ هذا الإجراء لا يمكن التراجع عنه.")) {
-    showLoading(true);
-    
     db.ref("orders").once("value").then(snapshot => {
       const orders = snapshot.val();
       const updates = {};
-      let count = 0;
       
       for (const [key, order] of Object.entries(orders)) {
         if (order.status === "completed") {
           updates[key] = null;
-          count++;
         }
       }
       
-      if (count === 0) {
-        alert("لا توجد طلبات مكتملة للحذف");
-        showLoading(false);
-        return;
-      }
-      
-      db.ref("orders").update(updates)
-        .then(() => {
-          logAdminActivity(`حذف ${count} طلبات مكتملة`);
-          alert(`تم حذف ${count} طلبات مكتملة`);
-        })
-        .catch(error => {
-          console.error("Error deleting completed orders:", error);
-          alert("حدث خطأ أثناء حذف الطلبات المكتملة");
-        })
-        .finally(() => {
-          showLoading(false);
-        });
+      db.ref("orders").update(updates);
     });
   }
 }
@@ -424,19 +258,7 @@ function clearCompleted() {
 // حذف صنف من القائمة
 function deleteMenuItem(itemId) {
   if (confirm("هل أنت متأكد من حذف هذا الصنف من القائمة؟")) {
-    showLoading(true);
-    
-    db.ref(`menu/${itemId}`).remove()
-      .then(() => {
-        logAdminActivity("حذف صنف من القائمة");
-      })
-      .catch(error => {
-        console.error("Error deleting menu item:", error);
-        alert("حدث خطأ أثناء حذف الصنف");
-      })
-      .finally(() => {
-        showLoading(false);
-      });
+    db.ref(`menu/${itemId}`).remove();
   }
 }
 
@@ -450,21 +272,6 @@ function filterOrders(type) {
   
   // تحميل الطلبات المصفاة
   loadOrders(type);
-  logAdminActivity(`تصفية الطلبات حسب: ${type}`);
-}
-
-// تسجيل أنشطة المسؤول
-function logAdminActivity(action) {
-  if (!auth.currentUser) return;
-  
-  db.ref("adminLogs").push({
-    action: action,
-    adminId: auth.currentUser.uid,
-    adminEmail: auth.currentUser.email,
-    timestamp: firebase.database.ServerValue.TIMESTAMP
-  }).catch(error => {
-    console.error("Error logging admin activity:", error);
-  });
 }
 
 // تنسيق الوقت
@@ -478,40 +285,6 @@ function formatTime(timestamp) {
     hour: '2-digit',
     minute: '2-digit'
   });
-}
-
-// عرض حالة التحميل
-function showLoading(show, container = null) {
-  const target = container || document.body;
-  const loadingElement = target.querySelector('.loading-overlay');
-  
-  if (show) {
-    if (!loadingElement) {
-      const overlay = document.createElement('div');
-      overlay.className = 'loading-overlay';
-      overlay.innerHTML = `
-        <div class="loading-spinner">
-          <i class="fas fa-spinner fa-spin"></i>
-          <p>جاري التحميل...</p>
-        </div>
-      `;
-      target.appendChild(overlay);
-    }
-  } else {
-    if (loadingElement) {
-      loadingElement.remove();
-    }
-  }
-}
-
-// عرض حالة فارغة
-function showEmptyState(container, message, icon) {
-  container.innerHTML = `
-    <div class="empty-state">
-      <i class="fas ${icon}"></i>
-      <p>${message}</p>
-    </div>
-  `;
 }
 
 // تصدير الدوال للوصول إليها من HTML
