@@ -82,6 +82,7 @@ footer, .admin-footer {
   margin-bottom: 2rem;
   box-shadow: var(--box-shadow);
   transition: var(--transition);
+  overflow: visible; /* إصلاح القطع */
 }
 
 .card h2, .admin-section h2 {
@@ -260,12 +261,13 @@ button {
   margin-top: 2rem;
 }
 
-/* قائمة الطعام */
+/* قائمة الطعام - معدلة */
 .menu-grid, .menu-items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
   margin-top: 1.5rem;
+  overflow: visible;
 }
 
 .menu-item {
@@ -274,23 +276,22 @@ button {
   padding: 1.5rem;
   transition: var(--transition);
   display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.menu-item:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+  flex-direction: column;
+  min-height: 200px;
+  height: auto;
+  overflow: hidden;
 }
 
 .item-info {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+  flex-grow: 1;
 }
 
 .item-info h3 {
   color: var(--primary-color);
   margin-bottom: 0.5rem;
   font-size: 1.4rem;
+  word-break: break-word;
 }
 
 .item-price {
@@ -303,6 +304,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  margin-top: auto;
 }
 
 .quantity-selector {
@@ -328,6 +330,13 @@ button {
   text-align: center;
   font-weight: bold;
   font-size: 1.2rem;
+}
+
+.item-note {
+  min-height: 60px;
+  max-height: 100px;
+  resize: vertical;
+  width: 100%;
 }
 
 /* ملخص الطلب */
@@ -574,6 +583,7 @@ button {
   text-align: center;
   padding: 3rem;
   color: #666;
+  grid-column: 1 / -1;
 }
 
 .empty-orders i, .empty-menu i {
@@ -600,12 +610,6 @@ button {
 
 .menu-item-info {
   flex-grow: 1;
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
 }
 
 /* تحسينات للواجهة */
@@ -661,6 +665,10 @@ button {
     padding: 0.9rem 1.5rem;
     font-size: 1.1rem;
   }
+  
+  .menu-item {
+    min-height: auto;
+  }
 }
 
 /* تحسينات للهواتف */
@@ -690,4 +698,42 @@ button {
   .admin-section {
     padding: 1.5rem;
   }
+  
+  .item-controls {
+    flex-direction: column;
+  }
+}
+
+/* تحسينات خاصة للغة العربية */
+[dir="rtl"] .menu-item {
+  text-align: right;
+}
+
+[dir="rtl"] .quantity-selector {
+  flex-direction: row-reverse;
+}
+
+[dir="rtl"] .order-details {
+  text-align: right;
+}
+
+[dir="rtl"] .item-details {
+  flex-direction: row-reverse;
+}
+
+/* منع قطع الكلمات */
+.item-name, .item-price, .order-item .item-name {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+/* إصلاحات إضافية للعرض */
+.admin-section {
+  min-height: 300px;
+  overflow: visible;
+}
+
+.menu-items-grid {
+  align-items: start;
 }
