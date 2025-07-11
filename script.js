@@ -2,28 +2,40 @@ const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// Global variables
 let currentTable = null;
 let scanner = null;
-let scannerInstance = null;
 let isScannerActive = false;
 let flashEnabled = false;
+let currentStream = null;
 
-// تهيئة السنة في التذييل
+// Initialize the page
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// تهيئة ماسح الباركود
-function initializeScanner() {
-  if (isScannerActive) return;
-  
-  // عرض مؤشر تحميل
+/**
+ * Initialize the barcode scanner
+ */
+async function initializeScanner() {
+  if (isScannerActive) {
+    console.log('Scanner is already active');
+    return;
+  }
+
   const scannerElement = document.getElementById('scanner');
   scannerElement.innerHTML = '<div class="scanner-loading"><i class="fas fa-spinner fa-spin"></i> جارٍ تهيئة الماسح...</div>';
-  
+
   try {
-    // تحديد أنواع الباركود المسموح بها (Barcode فقط)
+    // Check camera permissions first
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    currentStream = stream;
+    
+    // Stop any existing tracks
+    stream.getTracks().forEach(track => track.stop());
+
     const formatsToSupport = [
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.CODE_39,
@@ -35,103 +47,134 @@ function initializeScanner() {
       Html5QrcodeSupportedFormats.ITF
     ];
 
-    scanner = new Html5QrcodeScanner("scanner", {
-      fps: 10,
-      qrbox: 250,
-      aspectRatio: 1.0,
-      disableFlip: false,
-      formatsToSupport: formatsToSupport,
-      rememberLastUsedCamera: true
-    }, false);
+    scanner = new Html5QrcodeScanner(
+      "scanner",
+      {
+        fps: 10,
+        qrbox: 250,
+        aspectRatio: 1.0,
+        disableFlip: false,
+        formatsToSupport: formatsToSupport,
+        rememberLastUsedCamera: true
+      },
+      false
+    );
 
-    const successCallback = (tableNumber) => {
-      isScannerActive = false;
-      scanner.clear().then(() => {
-        console.log("QR Scanner stopped successfully");
-        handleTableScanned(tableNumber);
-      }).catch(err => {
-        console.error("Failed to stop scanner", err);
-        handleTableScanned(tableNumber);
-      });
+    const successCallback = async (decodedText) => {
+      if (!isScannerActive) return;
+      
+      console.log('Barcode scanned:', decodedText);
+      await stopScanner();
+      handleTableScanned(decodedText);
     };
 
     const errorCallback = (error) => {
-      console.error("QR Scanner error:", error);
-      scannerElement.innerHTML = `
-        <div class="scanner-error">
-          <i class="fas fa-exclamation-triangle"></i>
-          <p>تعذر تشغيل الماسح الضوئي</p>
-          <p>${error.message || 'حدث خطأ غير متوقع'}</p>
-          <button onclick="retryScanner()" class="btn-secondary">
-            <i class="fas fa-redo"></i> إعادة المحاولة
-          </button>
-        </div>
-      `;
-      document.querySelector('.fallback-input').style.display = 'block';
+      console.error('Scanner error:', error);
+      if (!error.message.includes('NotFoundException')) {
+        showScannerError(error);
+      }
     };
 
-    scanner.render(successCallback, errorCallback);
+    await scanner.render(successCallback, errorCallback);
     isScannerActive = true;
-    scannerInstance = scanner;
+    console.log('Scanner initialized successfully');
+    
   } catch (error) {
-    console.error("Scanner initialization error:", error);
-    scannerElement.innerHTML = `
-      <div class="scanner-error">
-        <i class="fas fa-exclamation-triangle"></i>
-        <p>تعذر تهيئة الماسح الضوئي</p>
-        <p>${error.message || 'حدث خطأ غير متوقع'}</p>
-      </div>
-    `;
-    document.querySelector('.fallback-input').style.display = 'block';
+    console.error('Scanner initialization failed:', error);
+    showScannerError(error);
   }
 }
 
-// إعادة المحاولة عند فشل التهيئة
-function retryScanner() {
+/**
+ * Stop the scanner and clean up resources
+ */
+async function stopScanner() {
+  if (!scanner || !isScannerActive) return;
+  
+  console.log('Stopping scanner...');
+  isScannerActive = false;
+  flashEnabled = false;
+  document.getElementById('flash-toggle')?.classList.remove('active');
+
+  try {
+    await scanner.clear();
+    scanner = null;
+    
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => track.stop());
+      currentStream = null;
+    }
+    
+    console.log('Scanner stopped successfully');
+  } catch (err) {
+    console.error('Failed to stop scanner:', err);
+    throw err;
+  }
+}
+
+/**
+ * Show scanner error message
+ */
+function showScannerError(error) {
+  const scannerElement = document.getElementById('scanner');
+  scannerElement.innerHTML = `
+    <div class="scanner-error">
+      <i class="fas fa-exclamation-triangle"></i>
+      <p>تعذر تشغيل الماسح الضوئي</p>
+      <p>${error.message || 'حدث خطأ غير متوقع'}</p>
+      <button onclick="retryScanner()" class="btn-secondary">
+        <i class="fas fa-redo"></i> إعادة المحاولة
+      </button>
+    </div>
+  `;
+  document.querySelector('.fallback-input').style.display = 'block';
+}
+
+/**
+ * Retry initializing the scanner
+ */
+async function retryScanner() {
   document.querySelector('.fallback-input').style.display = 'none';
+  await stopScanner();
   initializeScanner();
 }
 
-// التحكم في فلاش الكاميرا
-function toggleFlash() {
-  if (!scannerInstance || !scannerInstance.getRunningTrackCapabilities) {
-    alert("لم يتم تهيئة الماسح بعد أو أن المتصفح لا يدعم هذه الميزة");
+/**
+ * Toggle camera flash
+ */
+async function toggleFlash() {
+  if (!scanner || !isScannerActive) {
+    alert("يجب تشغيل الماسح أولاً");
     return;
   }
 
+  const flashBtn = document.getElementById('flash-toggle');
+  
   try {
-    const flashBtn = document.getElementById('flash-toggle');
     flashEnabled = !flashEnabled;
     
     if (flashEnabled) {
-      scannerInstance.applyVideoConstraints({
-        advanced: [{torch: true}]
-      }).then(() => {
-        flashBtn.classList.add('active');
-        console.log("Flash enabled");
-      }).catch(err => {
-        console.error("Failed to enable flash:", err);
-        alert("هذا المتصفح أو الجهاز لا يدعم تشغيل الفلاش");
-      });
+      await scanner.applyVideoConstraints({ advanced: [{torch: true}] });
+      flashBtn.classList.add('active');
     } else {
-      scannerInstance.applyVideoConstraints({
-        advanced: [{torch: false}]
-      }).then(() => {
-        flashBtn.classList.remove('active');
-        console.log("Flash disabled");
-      }).catch(err => {
-        console.error("Failed to disable flash:", err);
-      });
+      await scanner.applyVideoConstraints({ advanced: [{torch: false}] });
+      flashBtn.classList.remove('active');
     }
   } catch (error) {
-    console.error("Error toggling flash:", error);
-    alert("حدث خطأ أثناء محاولة التحكم في الفلاش");
+    console.error("Flash control error:", error);
+    alert("هذا المتصفح أو الجهاز لا يدعم تشغيل الفلاش");
+    flashEnabled = false;
+    flashBtn.classList.remove('active');
   }
 }
 
+/**
+ * Handle scanned table number
+ */
 function handleTableScanned(tableNumber) {
   if (!tableNumber || isNaN(tableNumber)) {
     alert("باركود غير صالح، الرجاء المحاولة مرة أخرى");
+    initializeScanner();
     return;
   }
   
@@ -143,6 +186,9 @@ function handleTableScanned(tableNumber) {
   loadMenu();
 }
 
+/**
+ * Enter table number manually
+ */
 function enterTableManually() {
   const table = document.getElementById('tableNumber').value;
   if (table) {
@@ -152,6 +198,9 @@ function enterTableManually() {
   }
 }
 
+/**
+ * Load menu items from Firebase
+ */
 function loadMenu() {
   db.ref("menu").on("value", snapshot => {
     const itemsDiv = document.getElementById('menu-items');
@@ -195,12 +244,18 @@ function loadMenu() {
   });
 }
 
+/**
+ * Increase item quantity
+ */
 function incrementQuantity(itemId) {
   const qtyElement = document.getElementById(`qty-value-${itemId}`);
   let currentQty = parseInt(qtyElement.textContent) || 0;
   qtyElement.textContent = currentQty + 1;
 }
 
+/**
+ * Decrease item quantity
+ */
 function decrementQuantity(itemId) {
   const qtyElement = document.getElementById(`qty-value-${itemId}`);
   let currentQty = parseInt(qtyElement.textContent) || 0;
@@ -209,7 +264,10 @@ function decrementQuantity(itemId) {
   }
 }
 
-function submitOrder() {
+/**
+ * Submit order to Firebase
+ */
+async function submitOrder() {
   const order = { 
     table: currentTable, 
     items: [],
@@ -217,34 +275,36 @@ function submitOrder() {
     timestamp: firebase.database.ServerValue.TIMESTAMP
   };
   
-  db.ref("menu").once("value").then(snapshot => {
-    const items = snapshot.val();
-    let hasItems = false;
-    
-    for (let key in items) {
-      const qty = parseInt(document.getElementById(`qty-value-${key}`).textContent) || 0;
-      const note = document.getElementById(`note-${key}`).value;
-      if (qty > 0) {
-        hasItems = true;
-        order.items.push({
-          name: items[key].name,
-          price: items[key].price,
-          qty: qty,
-          note: note
-        });
-      }
+  const snapshot = await db.ref("menu").once("value");
+  const items = snapshot.val();
+  let hasItems = false;
+  
+  for (let key in items) {
+    const qty = parseInt(document.getElementById(`qty-value-${key}`).textContent) || 0;
+    const note = document.getElementById(`note-${key}`).value;
+    if (qty > 0) {
+      hasItems = true;
+      order.items.push({
+        name: items[key].name,
+        price: parseFloat(items[key].price),
+        qty: qty,
+        note: note
+      });
     }
-    
-    if (!hasItems) {
-      alert("الرجاء إضافة كمية لعنصر واحد على الأقل");
-      return;
-    }
-    
-    db.ref("orders").push(order);
-    showOrderSummary(order);
-  });
+  }
+  
+  if (!hasItems) {
+    alert("الرجاء إضافة كمية لعنصر واحد على الأقل");
+    return;
+  }
+  
+  await db.ref("orders").push(order);
+  showOrderSummary(order);
 }
 
+/**
+ * Show order confirmation
+ */
 function showOrderSummary(order) {
   document.getElementById('menu').style.display = 'none';
   document.getElementById('summary-table').textContent = order.table;
@@ -265,56 +325,44 @@ function showOrderSummary(order) {
   });
   
   itemsDiv.innerHTML += `<br><div class="summary-total">المجموع: ${total.toFixed(2)} جنيه</div>`;
-  
   document.getElementById('order-summary').style.display = 'block';
 }
 
-function goBack() {
-  // إيقاف الفلاش إذا كان نشطًا
-  if (flashEnabled) {
-    toggleFlash();
-  }
-  
+/**
+ * Go back to scanner
+ */
+async function goBack() {
+  await stopScanner();
   document.getElementById('menu').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   document.querySelector('.fallback-input').style.display = 'none';
   currentTable = null;
-  
-  if (scanner) {
-    scanner.clear().catch(error => {
-      console.error("Failed to clear scanner", error);
-    });
-    scanner = null;
-    scannerInstance = null;
-  }
-  isScannerActive = false;
   initializeScanner();
 }
 
-function newOrder() {
+/**
+ * Start a new order
+ */
+async function newOrder() {
+  await stopScanner();
   document.getElementById('order-summary').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   currentTable = null;
-  
-  if (scanner) {
-    scanner.clear().catch(error => {
-      console.error("Failed to clear scanner", error);
-    });
-    scanner = null;
-    scannerInstance = null;
-  }
-  isScannerActive = false;
   initializeScanner();
 }
 
-// تهيئة الماسح عند تحميل الصفحة
+// Event listeners
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
-  // إضافة حدث لزر الإدخال اليدوي
   document.getElementById('tableNumber').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       enterTableManually();
     }
   });
+});
+
+// Clean up on page exit
+window.addEventListener('beforeunload', async () => {
+  await stopScanner();
 });
