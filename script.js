@@ -12,35 +12,55 @@ let isScannerActive = false;
 // تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// تهيئة ماسح الباركود
-function initializeScanner() {
+// تهيئة الماسح مع الكاميرا الخلفية مباشرة
+async function initializeScanner() {
   if (isScannerActive) return;
   
   try {
-    scanner = new Html5QrcodeScanner("scanner", {
-      fps: 10,
-      qrbox: 250,
-      aspectRatio: 1.0,
-      disableFlip: false
-    });
-
-    const successCallback = (tableNumber) => {
-      isScannerActive = false;
-      scanner.clear().then(() => {
-        console.log("QR Scanner stopped successfully");
-        handleTableScanned(tableNumber);
-      }).catch(err => {
-        console.error("Failed to stop scanner", err);
-        handleTableScanned(tableNumber);
-      });
+    const html5QrCode = new Html5Qrcode("scanner");
+    
+    // دالة للعثور على الكاميرا الخلفية
+    const getBackCamera = async () => {
+      const devices = await Html5Qrcode.getCameras();
+      for (const device of devices) {
+        if (device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('rear')) {
+          return device.id;
+        }
+      }
+      // إذا لم نجد كاميرا خلفية، نستخدم آخر كاميرا (عادة تكون الخلفية في الأجهزة التي بها كاميرا واحدة)
+      return devices[devices.length - 1].id;
     };
-
-    const errorCallback = (error) => {
-      console.error("QR Scanner error:", error);
-      document.querySelector('.fallback-input').style.display = 'block';
-    };
-
-    scanner.render(successCallback, errorCallback);
+    
+    const cameraId = await getBackCamera();
+    
+    await html5QrCode.start(
+      cameraId,
+      {
+        fps: 10,
+        qrbox: 250,
+        aspectRatio: 1.0,
+        disableFlip: false
+      },
+      (tableNumber) => {
+        // نجاح المسح
+        isScannerActive = false;
+        html5QrCode.stop().then(() => {
+          console.log("QR Scanner stopped successfully");
+          handleTableScanned(tableNumber);
+        }).catch(err => {
+          console.error("Failed to stop scanner", err);
+          handleTableScanned(tableNumber);
+        });
+      },
+      (errorMessage) => {
+        // خطأ في المسح
+        console.error("QR Scanner error:", errorMessage);
+        document.querySelector('.fallback-input').style.display = 'block';
+      }
+    );
+    
+    scanner = html5QrCode;
     isScannerActive = true;
   } catch (error) {
     console.error("Scanner initialization error:", error);
@@ -195,13 +215,22 @@ function goBack() {
   currentTable = null;
   
   if (scanner) {
-    scanner.clear().catch(error => {
-      console.error("Failed to clear scanner", error);
+    scanner.stop().then(() => {
+      console.log("Scanner stopped successfully");
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
+    }).catch(error => {
+      console.error("Failed to stop scanner", error);
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
     });
-    scanner = null;
+  } else {
+    initializeScanner();
   }
-  isScannerActive = false;
-  initializeScanner();
 }
 
 function newOrder() {
@@ -210,13 +239,22 @@ function newOrder() {
   currentTable = null;
   
   if (scanner) {
-    scanner.clear().catch(error => {
-      console.error("Failed to clear scanner", error);
+    scanner.stop().then(() => {
+      console.log("Scanner stopped successfully");
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
+    }).catch(error => {
+      console.error("Failed to stop scanner", error);
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
     });
-    scanner = null;
+  } else {
+    initializeScanner();
   }
-  isScannerActive = false;
-  initializeScanner();
 }
 
 // تهيئة الماسح عند تحميل الصفحة
@@ -230,3 +268,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// تصدير الدوال للوصول إليها من HTML
+window.enterTableManually = enterTableManually;
+window.goBack = goBack;
+window.newOrder = newOrder;
+window.incrementQuantity = incrementQuantity;
+window.decrementQuantity = decrementQuantity;
+window.submitOrder = submitOrder;
