@@ -1,14 +1,14 @@
 /* أنماط عامة */
 :root {
-  --primary-color: #E91E63; /* وردي زاهي */
-  --secondary-color: #9C27B0; /* بنفسجي */
-  --accent-color: #FF5722; /* برتقالي */
+  --primary-color: #E91E63;
+  --secondary-color: #9C27B0;
+  --accent-color: #FF5722;
   --light-color: #F5F5F5;
   --dark-color: #333;
-  --success-color: #4CAF50; /* أخضر */
-  --danger-color: #F44336; /* أحمر */
-  --warning-color: #FFC107; /* أصفر */
-  --info-color: #2196F3; /* أزرق */
+  --success-color: #4CAF50;
+  --danger-color: #F44336;
+  --warning-color: #FFC107;
+  --info-color: #2196F3;
   --border-radius: 12px;
   --box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
   --transition: all 0.3s ease;
@@ -35,8 +35,8 @@ body {
   min-height: 100vh;
 }
 
-/* التنسيق العام للعناصر */
-.container, .admin-container {
+/* التنسيق العام */
+.container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
@@ -45,8 +45,8 @@ body {
   flex-direction: column;
 }
 
-/* التنسيق للرأس والتذييل */
-.main-header, .admin-header {
+/* الرأس والتذييل */
+.main-header {
   text-align: center;
   padding: 2rem;
   background-color: var(--primary-color);
@@ -56,7 +56,7 @@ body {
   box-shadow: var(--box-shadow);
 }
 
-.main-header h1, .admin-header h1 {
+.main-header h1 {
   font-size: 2.2rem;
   margin-bottom: 1rem;
 }
@@ -66,7 +66,7 @@ body {
   opacity: 0.9;
 }
 
-footer, .admin-footer {
+footer {
   text-align: center;
   padding: 1.5rem;
   margin-top: auto;
@@ -75,7 +75,7 @@ footer, .admin-footer {
 }
 
 /* بطاقات الواجهة */
-.card, .admin-section {
+.card {
   background-color: white;
   border-radius: var(--border-radius);
   padding: 2rem;
@@ -84,7 +84,7 @@ footer, .admin-footer {
   transition: var(--transition);
 }
 
-.card h2, .admin-section h2 {
+.card h2 {
   margin-bottom: 1.5rem;
   color: var(--primary-color);
   display: flex;
@@ -104,7 +104,7 @@ button {
   letter-spacing: 0.5px;
 }
 
-.btn-primary, .btn-login, .btn-add {
+.btn-primary {
   background-color: var(--primary-color);
   color: white;
   padding: 1rem 1.8rem;
@@ -116,9 +116,9 @@ button {
   box-shadow: 0 4px 8px rgba(233, 30, 99, 0.3);
 }
 
-.btn-primary:hover, .btn-login:hover, .btn-add:hover {
+.btn-primary:hover {
   background-color: #C2185B;
-  transform: translateY(-3px) scale(1.02);
+  transform: translateY(-3px);
   box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
 }
 
@@ -136,7 +136,7 @@ button {
 
 .btn-secondary:hover {
   background-color: #7B1FA2;
-  transform: translateY(-3px) scale(1.02);
+  transform: translateY(-3px);
   box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
 }
 
@@ -146,39 +146,6 @@ button {
   width: 100%;
   justify-content: center;
   margin-top: 1.5rem;
-}
-
-.btn-complete {
-  background-color: var(--success-color);
-  color: white;
-  padding: 0.8rem 1.5rem;
-  border-radius: var(--border-radius);
-  font-size: 1.1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.btn-delete {
-  background-color: var(--danger-color);
-  color: white;
-  padding: 0.8rem 1.5rem;
-  border-radius: var(--border-radius);
-  font-size: 1.1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.btn-logout {
-  background-color: var(--danger-color);
-  color: white;
-  padding: 0.8rem 1.5rem;
-  border-radius: var(--border-radius);
-  font-size: 1.1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
 }
 
 /* حقول الإدخال */
@@ -196,7 +163,7 @@ button {
   font-size: 1.1rem;
 }
 
-.input-group input, .input-group textarea {
+.input-group input {
   width: 100%;
   padding: 1rem;
   border: 2px solid #ddd;
@@ -205,12 +172,7 @@ button {
   font-size: 1.1rem;
 }
 
-.input-group textarea {
-  min-height: 100px;
-  resize: vertical;
-}
-
-/* ماسح الباركود */
+/* ماسح الباركود المحسن */
 .scanner-container {
   position: relative;
   width: 100%;
@@ -219,13 +181,14 @@ button {
   border-radius: var(--border-radius);
   overflow: hidden;
   background-color: #000;
+  min-height: 300px;
 }
 
 #scanner {
   width: 100%;
-  height: auto;
+  height: 100%;
   min-height: 300px;
-  background-color: #f0f0f0;
+  position: relative;
 }
 
 .scanner-overlay {
@@ -239,6 +202,7 @@ button {
   justify-content: center;
   align-items: center;
   pointer-events: none;
+  z-index: 1;
 }
 
 .scanner-frame {
@@ -248,6 +212,8 @@ button {
   border-radius: var(--border-radius);
   margin-bottom: 1.5rem;
   animation: pulse 2s infinite;
+  position: relative;
+  z-index: 2;
 }
 
 @keyframes pulse {
@@ -262,13 +228,15 @@ button {
   padding: 0.8rem 1.5rem;
   border-radius: var(--border-radius);
   font-size: 1.1rem;
+  text-align: center;
+  z-index: 2;
 }
 
 .fallback-input {
   margin-top: 2rem;
 }
 
-/* زر الفلاش */
+/* زر الفلاش المحسن */
 .flash-btn {
   position: absolute;
   bottom: 20px;
@@ -298,7 +266,7 @@ button {
   background-color: rgba(255, 193, 7, 0.2);
 }
 
-/* مؤشرات التحميل والخطأ */
+/* حالات التحميل والخطأ */
 .scanner-loading, .scanner-error {
   display: flex;
   flex-direction: column;
@@ -308,6 +276,13 @@ button {
   color: white;
   text-align: center;
   padding: 2rem;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 5;
 }
 
 .scanner-loading i {
@@ -332,7 +307,7 @@ button {
 }
 
 /* قائمة الطعام */
-.menu-grid, .menu-items-grid {
+.menu-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
@@ -389,6 +364,14 @@ button {
   justify-content: center;
   align-items: center;
   font-size: 1.2rem;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.qty-btn:hover {
+  background-color: #7B1FA2;
+  transform: scale(1.1);
 }
 
 .qty-value {
@@ -464,15 +447,15 @@ button {
     --font-size-large: 20px;
   }
   
-  .container, .admin-container {
+  .container {
     padding: 1.5rem;
   }
   
-  .main-header h1, .admin-header h1 {
+  .main-header h1 {
     font-size: 1.8rem;
   }
   
-  .menu-grid, .menu-items-grid {
+  .menu-grid {
     grid-template-columns: 1fr;
   }
   
@@ -489,7 +472,7 @@ button {
     left: 15px;
   }
   
-  .btn-primary, .btn-login, .btn-add {
+  .btn-primary {
     padding: 0.9rem 1.5rem;
     font-size: 1.1rem;
   }
@@ -500,8 +483,7 @@ button {
   text-align: right;
 }
 
-[dir="rtl"] .input-group input,
-[dir="rtl"] .input-group textarea {
+[dir="rtl"] .input-group input {
   text-align: right;
 }
 
