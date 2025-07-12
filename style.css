@@ -38,7 +38,7 @@ body {
 }
 
 /* التخطيط العام */
-.container {
+.container, .admin-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
@@ -48,7 +48,7 @@ body {
 }
 
 /* الرأس الرئيسي */
-.main-header {
+.main-header, .admin-header {
   text-align: center;
   padding: 2rem;
   background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
@@ -60,7 +60,7 @@ body {
   overflow: hidden;
 }
 
-.main-header::before {
+.main-header::before, .admin-header::before {
   content: "";
   position: absolute;
   top: -50%;
@@ -71,7 +71,7 @@ body {
   transform: rotate(30deg);
 }
 
-.main-header h1 {
+.main-header h1, .admin-header h1 {
   font-size: 2.2rem;
   margin-bottom: 1rem;
   position: relative;
@@ -84,7 +84,7 @@ body {
 }
 
 /* التذييل */
-footer {
+footer, .admin-footer {
   text-align: center;
   padding: 1.5rem;
   margin-top: auto;
@@ -94,7 +94,7 @@ footer {
 }
 
 /* البطاقات */
-.card {
+.card, .admin-section {
   background-color: white;
   border-radius: var(--border-radius);
   padding: 2rem;
@@ -105,12 +105,12 @@ footer {
   overflow: hidden;
 }
 
-.card:hover {
+.card:hover, .admin-section:hover {
   transform: translateY(-5px);
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.1);
 }
 
-.card h2 {
+.card h2, .admin-section h2 {
   margin-bottom: 1.5rem;
   color: var(--primary-color);
   display: flex;
@@ -119,7 +119,7 @@ footer {
   font-size: 1.8rem;
 }
 
-.card h2 i {
+.card h2 i, .admin-section h2 i {
   font-size: 1.5rem;
 }
 
@@ -151,7 +151,7 @@ button:hover::after {
   opacity: 1;
 }
 
-.btn-primary {
+.btn-primary, .btn-login, .btn-add {
   background-color: var(--primary-color);
   color: white;
   padding: 1rem 1.8rem;
@@ -163,7 +163,7 @@ button:hover::after {
   box-shadow: 0 4px 8px rgba(233, 30, 99, 0.3);
 }
 
-.btn-primary:hover {
+.btn-primary:hover, .btn-login:hover, .btn-add:hover {
   background-color: #C2185B;
   transform: translateY(-3px);
   box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
@@ -193,6 +193,38 @@ button:hover::after {
   width: 100%;
   justify-content: center;
   margin-top: 1.5rem;
+}
+
+.btn-complete {
+  background-color: var(--success-color);
+  color: white;
+  padding: 0.8rem 1.5rem;
+  border-radius: var(--border-radius);
+  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-delete, .btn-logout {
+  background-color: var(--danger-color);
+  color: white;
+  padding: 0.8rem 1.5rem;
+  border-radius: var(--border-radius);
+  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-complete:hover {
+  background-color: #3d8b40;
+  transform: translateY(-3px);
+}
+
+.btn-delete:hover, .btn-logout:hover {
+  background-color: #d32f2f;
+  transform: translateY(-3px);
 }
 
 /* حقول الإدخال */
@@ -439,7 +471,7 @@ button:hover::after {
 }
 
 /* قائمة الطعام */
-.menu-grid {
+.menu-grid, .menu-items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
@@ -472,7 +504,7 @@ button:hover::after {
   border-bottom-right-radius: var(--border-radius);
 }
 
-.item-info {
+.item-info, .menu-item-info {
   margin-bottom: 1.5rem;
 }
 
@@ -600,6 +632,208 @@ button:hover::after {
   color: var(--primary-color);
 }
 
+/* لوحة التحكم */
+.login-card {
+  max-width: 500px;
+  margin: 3rem auto;
+  background-color: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  overflow: hidden;
+  border: 3px solid var(--primary-color);
+}
+
+.login-header {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 2rem;
+  text-align: center;
+}
+
+.login-header i {
+  font-size: 3.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.login-header h1 {
+  font-size: 2rem;
+}
+
+.login-body {
+  padding: 2rem;
+}
+
+.admin-main {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-tab {
+  padding: 0.8rem 1.5rem;
+  border-radius: var(--border-radius);
+  background-color: #eee;
+  font-size: 1.1rem;
+  transition: var(--transition);
+}
+
+.filter-tab:hover {
+  transform: translateY(-2px);
+}
+
+.filter-tab.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.filter-tab.danger {
+  background-color: var(--danger-color);
+  color: white;
+  margin-right: auto;
+}
+
+/* الطلبات */
+.orders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.order-card {
+  border: 2px solid #eee;
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  transition: var(--transition);
+}
+
+.order-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.order-card.completed {
+  opacity: 0.8;
+  background-color: #f8f9fa;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.order-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.order-id {
+  font-weight: bold;
+  color: var(--primary-color);
+  font-size: 1.2rem;
+}
+
+.order-status {
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+}
+
+.order-status.pending {
+  background-color: var(--warning-color);
+  color: var(--dark-color);
+}
+
+.order-status.completed {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.order-time {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.order-items {
+  margin-bottom: 1.5rem;
+}
+
+.order-item {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed #eee;
+}
+
+.item-name {
+  font-weight: 500;
+  font-size: 1.1rem;
+}
+
+.item-details {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 1rem;
+}
+
+.item-total {
+  margin-right: auto;
+  font-weight: bold;
+}
+
+.item-note {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+.order-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.order-total {
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.order-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+/* حالات فارغة */
+.empty-orders, .empty-menu {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.empty-orders i, .empty-menu i {
+  font-size: 3rem;
+  margin-bottom: 1.5rem;
+  opacity: 0.5;
+}
+
+.empty-orders p, .empty-menu p {
+  font-size: 1.2rem;
+}
+
 /* التكيف مع الشاشات الصغيرة */
 @media (max-width: 768px) {
   :root {
@@ -607,23 +841,15 @@ button:hover::after {
     --font-size-large: 20px;
   }
   
-  .container {
+  .container, .admin-container {
     padding: 1rem;
   }
   
-  .main-header {
-    padding: 1.5rem;
-  }
-  
-  .main-header h1 {
+  .main-header h1, .admin-header h1 {
     font-size: 1.8rem;
   }
   
-  .card {
-    padding: 1.5rem;
-  }
-  
-  .menu-grid {
+  .menu-grid, .menu-items-grid {
     grid-template-columns: 1fr;
   }
   
@@ -640,7 +866,7 @@ button:hover::after {
     left: 15px;
   }
   
-  .btn-primary, .btn-secondary {
+  .btn-primary, .btn-login, .btn-add {
     padding: 0.9rem 1.5rem;
     font-size: 1.1rem;
   }
@@ -659,6 +885,26 @@ button:hover::after {
   
   .input-actions button {
     width: 100%;
+  }
+  
+  .order-header, .order-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .order-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .admin-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 992px) {
+  .admin-main {
+    grid-template-columns: 2fr 1fr;
   }
 }
 
