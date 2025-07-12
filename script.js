@@ -12,16 +12,41 @@ let scanner = null;
 let isScannerActive = false;
 let flashEnabled = false;
 let currentStream = null;
+let inputMode = 'scan';
 
 // Initialize the page
 document.getElementById('year').textContent = new Date().getFullYear();
 
 /**
+ * Set input mode (scan or manual)
+ */
+function setInputMode(mode) {
+  inputMode = mode;
+  
+  if (mode === 'scan') {
+    document.getElementById('scan-mode-btn').classList.add('active');
+    document.getElementById('manual-mode-btn').classList.remove('active');
+    document.getElementById('scanner-section').style.display = 'block';
+    document.getElementById('manual-input-section').style.display = 'none';
+    initializeScanner();
+  } else {
+    document.getElementById('scan-mode-btn').classList.remove('active');
+    document.getElementById('manual-mode-btn').classList.add('active');
+    document.getElementById('scanner-section').style.display = 'none';
+    document.getElementById('manual-input-section').style.display = 'block';
+    stopScanner();
+    document.getElementById('tableNumber').focus();
+  }
+  
+  hideError();
+}
+
+/**
  * Initialize the barcode scanner
  */
 async function initializeScanner() {
-  if (isScannerActive) {
-    console.log('Scanner is already active');
+  if (isScannerActive || inputMode !== 'scan') {
+    console.log('Scanner is already active or not in scan mode');
     return;
   }
 
@@ -127,14 +152,12 @@ function showScannerError(error) {
       </button>
     </div>
   `;
-  document.querySelector('.fallback-input').style.display = 'block';
 }
 
 /**
  * Retry initializing the scanner
  */
 async function retryScanner() {
-  document.querySelector('.fallback-input').style.display = 'none';
   await stopScanner();
   initializeScanner();
 }
@@ -173,7 +196,7 @@ async function toggleFlash() {
  */
 function handleTableScanned(tableNumber) {
   if (!tableNumber || isNaN(tableNumber)) {
-    alert("باركود غير صالح، الرجاء المحاولة مرة أخرى");
+    showError("باركود غير صالح، الرجاء المحاولة مرة أخرى");
     initializeScanner();
     return;
   }
@@ -190,12 +213,40 @@ function handleTableScanned(tableNumber) {
  * Enter table number manually
  */
 function enterTableManually() {
-  const table = document.getElementById('tableNumber').value;
-  if (table) {
-    handleTableScanned(table);
-  } else {
-    alert("الرجاء إدخال رقم الطاولة");
+  const tableNumberInput = document.getElementById('tableNumber');
+  const tableNumber = tableNumberInput.value.trim();
+  
+  if (!tableNumber) {
+    showError('الرجاء إدخال رقم الطاولة');
+    tableNumberInput.focus();
+    return;
   }
+  
+  const tableNum = parseInt(tableNumber);
+  if (isNaN(tableNum) || tableNum < 1 || tableNum > 100) {
+    showError('رقم الطاولة يجب أن يكون بين 1 و 100');
+    tableNumberInput.focus();
+    return;
+  }
+  
+  hideError();
+  handleTableScanned(tableNumber);
+}
+
+/**
+ * Show error message
+ */
+function showError(message) {
+  const errorElement = document.getElementById('input-error');
+  errorElement.textContent = message;
+  errorElement.classList.add('show');
+}
+
+/**
+ * Hide error message
+ */
+function hideError() {
+  document.getElementById('input-error').classList.remove('show');
 }
 
 /**
@@ -335,9 +386,8 @@ async function goBack() {
   await stopScanner();
   document.getElementById('menu').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
-  document.querySelector('.fallback-input').style.display = 'none';
   currentTable = null;
-  initializeScanner();
+  setInputMode('scan');
 }
 
 /**
@@ -348,7 +398,7 @@ async function newOrder() {
   document.getElementById('order-summary').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   currentTable = null;
-  initializeScanner();
+  setInputMode('scan');
 }
 
 // Event listeners
@@ -366,3 +416,14 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', async () => {
   await stopScanner();
 });
+
+// Make functions available globally
+window.setInputMode = setInputMode;
+window.enterTableManually = enterTableManually;
+window.toggleFlash = toggleFlash;
+window.retryScanner = retryScanner;
+window.goBack = goBack;
+window.newOrder = newOrder;
+window.submitOrder = submitOrder;
+window.incrementQuantity = incrementQuantity;
+window.decrementQuantity = decrementQuantity;
