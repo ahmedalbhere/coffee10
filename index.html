@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -19,28 +19,50 @@
     <main>
       <div id="table-input" class="card">
         <h2><i class="fas fa-qrcode"></i> مسح باركود الطاولة</h2>
-        <div class="scanner-container">
-          <div id="scanner"></div>
-          <div class="scanner-overlay">
-            <div class="scanner-frame"></div>
-            <p class="scanner-guide">ضع باركود الطاولة داخل الإطار</p>
-          </div>
-          <button id="flash-toggle" class="flash-btn" onclick="toggleFlash()">
-            <i class="fas fa-lightbulb"></i>
+        
+        <div class="input-mode-switcher">
+          <button id="scan-mode-btn" class="mode-btn active" onclick="setInputMode('scan')">
+            <i class="fas fa-camera"></i> مسح ضوئي
+          </button>
+          <button id="manual-mode-btn" class="mode-btn" onclick="setInputMode('manual')">
+            <i class="fas fa-keyboard"></i> إدخال يدوي
           </button>
         </div>
-        <div class="fallback-input" style="display:none;">
-          <p>في حالة عدم عمل الماسح الضوئي:</p>
-          <div class="input-group">
-            <input type="number" id="tableNumber" placeholder="أدخل رقم الطاولة يدويًا" min="1">
-            <button onclick="enterTableManually()" class="btn-secondary">
-              <i class="fas fa-keyboard"></i> إدخال يدوي
+
+        <div id="scanner-section">
+          <div class="scanner-container">
+            <div id="scanner"></div>
+            <div class="scanner-overlay">
+              <div class="scanner-frame"></div>
+              <p class="scanner-guide">ضع باركود الطاولة داخل الإطار</p>
+            </div>
+            <button id="flash-toggle" class="flash-btn" onclick="toggleFlash()">
+              <i class="fas fa-lightbulb"></i>
             </button>
           </div>
         </div>
+
+        <div id="manual-input-section" style="display: none;">
+          <div class="manual-input-container">
+            <div class="input-group">
+              <label for="tableNumber"><i class="fas fa-table"></i> رقم الطاولة:</label>
+              <input type="number" id="tableNumber" placeholder="أدخل رقم الطاولة من 1 إلى 100" min="1" max="100">
+            </div>
+            <div class="input-actions">
+              <button onclick="enterTableManually()" class="btn-primary">
+                <i class="fas fa-check"></i> تأكيد
+              </button>
+              <button onclick="setInputMode('scan')" class="btn-secondary">
+                <i class="fas fa-arrow-left"></i> العودة للماسح
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="input-error" class="error-message" style="display: none;"></div>
       </div>
 
-      <div id="menu" class="card" style="display:none;">
+      <div id="menu" class="card" style="display: none;">
         <div class="menu-header">
           <h2><i class="fas fa-book-open"></i> قائمة المنيو</h2>
           <div class="scanned-table-info">
@@ -57,7 +79,7 @@
         </button>
       </div>
 
-      <div id="order-summary" class="card" style="display:none;">
+      <div id="order-summary" class="card" style="display: none;">
         <div class="success-icon">
           <i class="fas fa-check-circle"></i>
         </div>
