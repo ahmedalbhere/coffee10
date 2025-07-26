@@ -2,188 +2,76 @@ const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
-let torchState = false;
-const SCANNER_CONFIG = {
-  fps: 60, // زيادة سرعة المعالجة
-  qrbox: { width: 300, height: 300 },
-  aspectRatio: 1.0,
-  disableFlip: false,
-  rememberLastUsedCamera: true,
-  supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-};
+const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
 
-// عناصر واجهة المستخدم
-const yearElement = document.getElementById('year');
-const scannerSection = document.getElementById('scanner-section');
-const manualInputSection = document.getElementById('manual-input-section');
-const menuSection = document.getElementById('menu');
-const orderSummarySection = document.getElementById('order-summary');
+// تهيئة السنة في التذييل
+document.getElementById('year').textContent = new Date().getFullYear();
 
-// تهيئة السنة
-yearElement.textContent = new Date().getFullYear();
-
-// 1. نظام الماسح الضوئي المتقدم
+// إدارة الماسح الضوئي
 function initializeScanner() {
   if (isScannerActive) return;
   isScannerActive = true;
 
-  cleanUpScanner();
+  // تنظيف الماسح السابق إذا كان موجوداً
+  if (scanner) {
+    scanner.clear().catch(console.error);
+  }
 
   try {
     scanner = new Html5QrcodeScanner(
       "scanner",
-      SCANNER_CONFIG,
-      /* verbose= */ false
+      {
+        fps: 30,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        disableFlip: false,
+        rememberLastUsedCamera: true,
+        showTorchButtonIfSupported: true
+      },
+      false
     );
 
-    // إضافة مؤثرات بصرية أثناء البحث
-    addScanningEffects();
-
     scanner.render(
-      qrCodeSuccessCallback,
-      qrCodeErrorCallback
-    ).then(() => {
-      // إضافة زر الكشاف بعد تهيئة الماسح
-      addTorchButton();
-    }).catch(handleInitError);
+      (decodedText) => {
+        handleScanSuccess(decodedText);
+      },
+      (error) => {
+        handleScanError(error);
+      }
+    );
   } catch (error) {
-    handleInitError(error);
+    console.error("Scanner initialization failed:", error);
+    handleScanError(error);
   }
 }
 
-function cleanUpScanner() {
-  if (scanner) {
-    scanner.clear().catch(error => {
-      console.error("Error cleaning scanner:", error);
-    });
-    removeScanningEffects();
-  }
-}
-
-function qrCodeSuccessCallback(decodedText) {
+function handleScanSuccess(decodedText) {
   scanner.pause().then(() => {
     handleTableScanned(decodedText);
-    removeScanningEffects();
   }).catch(console.error);
 }
 
-function qrCodeErrorCallback(error) {
-  console.error("QR Scan Error:", error);
-  showManualInput();
-  scheduleRetry();
-}
-
-function handleInitError(error) {
-  console.error("Scanner Init Error:", error);
-  showManualInput();
-  scheduleRetry();
-}
-
-// 2. مؤثرات بصرية للماسح
-function addScanningEffects() {
-  const scannerElement = document.getElementById('scanner');
-  if (!scannerElement) return;
-
-  // إضافة نقاط متحركة للبحث
-  const dotsOverlay = document.createElement('div');
-  dotsOverlay.className = 'scanning-dots';
-  dotsOverlay.innerHTML = `
-    <div class="dot dot-1"></div>
-    <div class="dot dot-2"></div>
-    <div class="dot dot-3"></div>
-  `;
-  scannerElement.appendChild(dotsOverlay);
-
-  // إضافة رسالة توجيهية
-  const guideMsg = document.createElement('div');
-  guideMsg.className = 'scanning-guide';
-  guideMsg.textContent = 'يتم البحث عن الباركود...';
-  scannerElement.appendChild(guideMsg);
-}
-
-function removeScanningEffects() {
-  const effects = document.querySelectorAll('.scanning-dots, .scanning-guide');
-  effects.forEach(effect => effect.remove());
-}
-
-// 3. إدارة الكشاف
-function addTorchButton() {
-  const scannerContainer = document.querySelector('.scanner-container');
-  if (!scannerContainer || scannerContainer.querySelector('.torch-btn')) return;
-
-  const torchBtn = document.createElement('button');
-  torchBtn.className = `torch-btn ${torchState ? 'active' : ''}`;
-  torchBtn.innerHTML = `<i class="fas fa-lightbulb"></i>`;
-  torchBtn.title = 'تشغيل/إطفاء الكشاف';
-  torchBtn.addEventListener('click', toggleTorch);
+function handleScanError(error) {
+  console.error("Scan error:", error);
+  document.querySelector('.fallback-input').style.display = 'block';
+  isScannerActive = false;
   
-  scannerContainer.appendChild(torchBtn);
-}
-
-async function toggleTorch() {
-  if (!scanner) return;
-  
-  try {
-    torchState = !torchState;
-    const torchBtn = document.querySelector('.torch-btn');
-    
-    if (torchState) {
-      await scanner.applyVideoConstraints({ advanced: [{ torch: true }] });
-      torchBtn.classList.add('active');
-      torchBtn.innerHTML = '<i class="fas fa-lightbulb"></i>';
-    } else {
-      await scanner.applyVideoConstraints({ advanced: [{ torch: false }] });
-      torchBtn.classList.remove('active');
-      torchBtn.innerHTML = '<i class="far fa-lightbulb"></i>';
-    }
-  } catch (error) {
-    console.error("Torch Error:", error);
-    alert("لا يدعم هذا الجهاز خاصية الكشاف");
-  }
-}
-
-// 4. إعادة المحاولة التلقائية
-function scheduleRetry() {
+  // إعادة المحاولة بعد 30 ثانية
   setTimeout(() => {
-    if (scannerSection.style.display !== 'none') {
+    if (document.getElementById('scanner-section').style.display !== 'none') {
       initializeScanner();
     }
-  }, 30000); // 30 ثانية
+  }, SCANNER_RETRY_DELAY);
 }
 
-// 5. إدارة واجهة المستخدم
-function showManualInput() {
-  manualInputSection.style.display = 'block';
-  scannerSection.style.display = 'none';
-  isScannerActive = false;
-}
-
-function showScanner() {
-  manualInputSection.style.display = 'none';
-  scannerSection.style.display = 'block';
-  initializeScanner();
-}
-
-function showMenuSection() {
-  scannerSection.style.display = 'none';
-  manualInputSection.style.display = 'none';
-  menuSection.style.display = 'block';
-  orderSummarySection.style.display = 'none';
-}
-
-function showOrderSummary() {
-  menuSection.style.display = 'none';
-  orderSummarySection.style.display = 'block';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// 6. إدارة الطلبات
+// إدارة الطاولات
 function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
@@ -194,74 +82,220 @@ function handleTableScanned(tableNumber) {
   }
 
   currentTable = tableNumber;
-  document.getElementById('scanned-table-number').textContent = tableNumber;
   showMenuSection();
   loadMenu();
 }
 
+function showMenuSection() {
+  document.getElementById('table-input').style.display = 'none';
+  document.getElementById('menu').style.display = 'block';
+  document.getElementById('scanned-table-number').textContent = currentTable;
+}
+
+// إدارة القائمة
 function loadMenu() {
   db.ref("menu").on("value", (snapshot) => {
     const items = snapshot.val();
     const itemsDiv = document.getElementById('menu-items');
     
-    itemsDiv.innerHTML = items ? renderMenuItems(items) : showEmptyMenu();
-    setupEventDelegation();
+    if (!items || Object.keys(items).length === 0) {
+      itemsDiv.innerHTML = '<div class="empty-menu"><i class="fas fa-utensils"></i><p>لا توجد أصناف متاحة</p></div>';
+      return;
+    }
+    
+    renderMenuItems(items, itemsDiv);
+    setupQuantityControls();
   });
 }
 
-function renderMenuItems(items) {
-  return Object.entries(items).map(([key, item]) => `
-    <div class="menu-item" data-id="${key}">
+function renderMenuItems(items, container) {
+  const fragment = document.createDocumentFragment();
+  
+  Object.entries(items).forEach(([key, item]) => {
+    const itemElement = document.createElement('div');
+    itemElement.className = 'menu-item';
+    itemElement.dataset.itemId = key;
+    itemElement.innerHTML = `
       <div class="item-info">
         <h3>${item.name}</h3>
         <div class="item-price">${item.price} جنيه</div>
       </div>
       <div class="item-controls">
         <div class="quantity-selector">
-          <button class="qty-btn minus-btn"><i class="fas fa-minus"></i></button>
+          <button class="qty-btn minus-btn">
+            <i class="fas fa-minus"></i>
+          </button>
           <span class="qty-value">0</span>
-          <button class="qty-btn plus-btn"><i class="fas fa-plus"></i></button>
+          <button class="qty-btn plus-btn">
+            <i class="fas fa-plus"></i>
+          </button>
         </div>
         <textarea class="item-note" placeholder="ملاحظات"></textarea>
       </div>
-    </div>
-  `).join('');
+    `;
+    fragment.appendChild(itemElement);
+  });
+  
+  container.innerHTML = '';
+  container.appendChild(fragment);
 }
 
-function setupEventDelegation() {
+function setupQuantityControls() {
   document.getElementById('menu-items').addEventListener('click', (e) => {
     const qtyElement = e.target.closest('.quantity-selector')?.querySelector('.qty-value');
     if (!qtyElement) return;
     
-    let qty = parseInt(qtyElement.textContent) || 0;
+    let currentQty = parseInt(qtyElement.textContent) || 0;
     
     if (e.target.closest('.minus-btn')) {
-      qtyElement.textContent = Math.max(0, qty - 1);
+      if (currentQty > 0) qtyElement.textContent = currentQty - 1;
     } else if (e.target.closest('.plus-btn')) {
-      qtyElement.textContent = qty + 1;
+      qtyElement.textContent = currentQty + 1;
     }
   });
 }
 
-// 7. الأحداث الرئيسية
+// إدارة الطلبات
+function submitOrder() {
+  if (!currentTable) {
+    alert("الرجاء تحديد رقم الطاولة أولاً");
+    return;
+  }
+
+  const orderItems = collectOrderItems();
+  
+  if (orderItems.length === 0) {
+    alert("الرجاء إضافة عناصر للطلب");
+    return;
+  }
+
+  submitOrderToFirebase(orderItems);
+}
+
+function collectOrderItems() {
+  const items = [];
+  
+  document.querySelectorAll('.menu-item').forEach(item => {
+    const qty = parseInt(item.querySelector('.qty-value').textContent) || 0;
+    if (qty > 0) {
+      items.push({
+        name: item.querySelector('h3').textContent,
+        price: parseFloat(item.querySelector('.item-price').textContent),
+        qty: qty,
+        note: item.querySelector('.item-note').value.trim()
+      });
+    }
+  });
+  
+  return items;
+}
+
+function submitOrderToFirebase(items) {
+  const order = { 
+    table: currentTable, 
+    items: items,
+    status: "pending",
+    timestamp: firebase.database.ServerValue.TIMESTAMP
+  };
+  
+  db.ref("orders").push(order)
+    .then(() => {
+      showOrderSummary(order);
+    })
+    .catch(error => {
+      console.error("Order submission error:", error);
+      alert("حدث خطأ أثناء إرسال الطلب");
+    });
+}
+
+// عرض ملخص الطلب
+function showOrderSummary(order) {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('order-summary').style.display = 'block';
+  
+  renderOrderDetails(order);
+}
+
+function renderOrderDetails(order) {
+  document.getElementById('summary-table').textContent = order.table;
+  
+  let html = '<strong>تفاصيل الطلب:</strong><br><br>';
+  let total = 0;
+  
+  order.items.forEach(item => {
+    const itemTotal = item.price * item.qty;
+    total += itemTotal;
+    html += `
+      <div class="summary-item">
+        ${item.qty} × ${item.name} - ${itemTotal.toFixed(2)} جنيه
+        ${item.note ? `<div class="summary-note">${item.note}</div>` : ''}
+      </div>
+    `;
+  });
+  
+  html += `<br><div class="summary-total">المجموع: ${total.toFixed(2)} جنيه</div>`;
+  document.getElementById('summary-items').innerHTML = html;
+}
+
+// التنقل بين الصفحات
+function goBack() {
+  resetScanner();
+  resetMenu();
+}
+
+function newOrder() {
+  document.getElementById('order-summary').style.display = 'none';
+  resetScanner();
+  showScannerSection();
+}
+
+function resetMenu() {
+  document.getElementById('menu').style.display = 'none';
+  showScannerSection();
+  currentTable = null;
+}
+
+function showScannerSection() {
+  document.getElementById('table-input').style.display = 'block';
+  initializeScanner();
+}
+
+function resetScanner() {
+  if (scanner) {
+    scanner.clear().then(() => {
+      scanner = null;
+      isScannerActive = false;
+    }).catch(console.error);
+  }
+}
+
+// تهيئة الصفحة
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
-  // أحداث الأزرار
-  document.getElementById('manual-mode-btn')?.addEventListener('click', showManualInput);
-  document.getElementById('scan-mode-btn')?.addEventListener('click', showScanner);
-  document.getElementById('back-to-scanner')?.addEventListener('click', showScanner);
-  document.getElementById('submit-order')?.addEventListener('click', submitOrder);
-  document.getElementById('new-order')?.addEventListener('click', newOrder);
-  document.getElementById('go-back')?.addEventListener('click', goBack);
+  // إضافة مستمع للأحداث للوضع اليدوي
+  document.getElementById('manual-mode-btn')?.addEventListener('click', () => {
+    document.getElementById('scanner-section').style.display = 'none';
+    document.getElementById('manual-input-section').style.display = 'block';
+    resetScanner();
+  });
   
-  // إدخال يدوي
+  document.getElementById('scan-mode-btn')?.addEventListener('click', () => {
+    document.getElementById('scanner-section').style.display = 'block';
+    document.getElementById('manual-input-section').style.display = 'none';
+    initializeScanner();
+  });
+  
   document.getElementById('tableNumber')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') enterTableManually();
+    if (e.key === 'Enter') {
+      enterTableManually();
+    }
   });
 });
 
-// 8. دوال مساعدة
+// الدوال العامة
 function enterTableManually() {
   const tableNumber = document.getElementById('tableNumber').value.trim();
   
@@ -272,26 +306,4 @@ function enterTableManually() {
   
   handleTableScanned(tableNumber);
   document.getElementById('tableNumber').value = '';
-}
-
-function goBack() {
-  resetScanner();
-  currentTable = null;
-  showScanner();
-}
-
-function newOrder() {
-  resetScanner();
-  currentTable = null;
-  showScanner();
-}
-
-function resetScanner() {
-  if (scanner) {
-    scanner.clear().then(() => {
-      scanner = null;
-      isScannerActive = false;
-      torchState = false;
-    }).catch(console.error);
-  }
 }
