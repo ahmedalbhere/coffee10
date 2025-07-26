@@ -2,78 +2,143 @@ const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
+let flashEnabled = false;
+let scannerRetryTimer = null;
+const SCANNER_RETRY_INTERVAL = 30000; // 30 ثانية
 
-// تهيئة السنة في التذييل
+// Set current year in footer
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// تهيئة الماسح مع الكاميرا الخلفية مباشرة
-async function initializeScanner() {
+// Initialize QR Scanner
+function initializeScanner() {
   if (isScannerActive) return;
   
+  clearScannerRetryTimer(); // مسح أي مؤقت سابق
+  
   try {
-    const html5QrCode = new Html5Qrcode("scanner");
-    
-    // دالة للعثور على الكاميرا الخلفية
-    const getBackCamera = async () => {
-      const devices = await Html5Qrcode.getCameras();
-      for (const device of devices) {
-        if (device.label.toLowerCase().includes('back') || 
-            device.label.toLowerCase().includes('rear')) {
-          return device.id;
-        }
-      }
-      // إذا لم نجد كاميرا خلفية، نستخدم آخر كاميرا (عادة تكون الخلفية في الأجهزة التي بها كاميرا واحدة)
-      return devices[devices.length - 1].id;
+    // Stop any existing scanner
+    if (scanner) {
+      scanner.clear().catch(err => {
+        console.error("Error clearing previous scanner:", err);
+      });
+    }
+
+    scanner = new Html5QrcodeScanner("scanner", {
+      fps: 10,
+      qrbox: 250,
+      aspectRatio: 1.0,
+      disableFlip: false
+    });
+
+    const successCallback = (decodedText) => {
+      isScannerActive = false;
+      scanner.clear().then(() => {
+        console.log("QR Scanner stopped successfully");
+        handleTableScanned(decodedText);
+      }).catch(err => {
+        console.error("Failed to stop scanner:", err);
+        handleTableScanned(decodedText);
+      });
     };
-    
-    const cameraId = await getBackCamera();
-    
-    await html5QrCode.start(
-      cameraId,
-      {
-        fps: 10,
-        qrbox: 250,
-        aspectRatio: 1.0,
-        disableFlip: false
-      },
-      (tableNumber) => {
-        // نجاح المسح
-        isScannerActive = false;
-        html5QrCode.stop().then(() => {
-          console.log("QR Scanner stopped successfully");
-          handleTableScanned(tableNumber);
-        }).catch(err => {
-          console.error("Failed to stop scanner", err);
-          handleTableScanned(tableNumber);
-        });
-      },
-      (errorMessage) => {
-        // خطأ في المسح
-        console.error("QR Scanner error:", errorMessage);
-        document.querySelector('.fallback-input').style.display = 'block';
+
+    const errorCallback = (error) => {
+      console.log("QR Scanner error:", error);
+      if (document.getElementById('scanner-section').style.display !== 'none') {
+        showError("تعذر تشغيل الماسح الضوئي، الرجاء المحاولة لاحقاً أو استخدام الإدخال اليدوي");
+        startScannerRetryTimer();
       }
-    );
-    
-    scanner = html5QrCode;
+    };
+
+    scanner.render(successCallback, errorCallback);
     isScannerActive = true;
+    
   } catch (error) {
     console.error("Scanner initialization error:", error);
-    document.querySelector('.fallback-input').style.display = 'block';
+    showError("تعذر تشغيل الماسح الضوئي، الرجاء المحاولة لاحقاً أو استخدام الإدخال اليدوي");
+    startScannerRetryTimer();
+  }
+}
+
+function startScannerRetryTimer() {
+  clearScannerRetryTimer();
+  scannerRetryTimer = setTimeout(() => {
+    if (document.getElementById('scanner-section').style.display !== 'none') {
+      initializeScanner();
+    }
+  }, SCANNER_RETRY_INTERVAL);
+}
+
+function clearScannerRetryTimer() {
+  if (scannerRetryTimer) {
+    clearTimeout(scannerRetryTimer);
+    scannerRetryTimer = null;
+  }
+}
+
+function toggleFlash() {
+  if (!scanner || !isScannerActive) return;
+  
+  flashEnabled = !flashEnabled;
+  const flashBtn = document.getElementById('flash-toggle');
+  
+  try {
+    if (flashEnabled) {
+      scanner.applyVideoConstraints({
+        advanced: [{torch: true}]
+      });
+      flashBtn.classList.add('active');
+      flashBtn.innerHTML = '<i class="fas fa-lightbulb"></i>';
+    } else {
+      scanner.applyVideoConstraints({
+        advanced: [{torch: false}]
+      });
+      flashBtn.classList.remove('active');
+      flashBtn.innerHTML = '<i class="far fa-lightbulb"></i>';
+    }
+  } catch (error) {
+    console.error("Error toggling flash:", error);
+    showError("تعذر تشغيل الفلاش في هذا المتصفح");
+  }
+}
+
+function setInputMode(mode) {
+  const scanBtn = document.getElementById('scan-mode-btn');
+  const manualBtn = document.getElementById('manual-mode-btn');
+  const scannerSection = document.getElementById('scanner-section');
+  const manualSection = document.getElementById('manual-input-section');
+  
+  if (mode === 'scan') {
+    scanBtn.classList.add('active');
+    manualBtn.classList.remove('active');
+    scannerSection.style.display = 'block';
+    manualSection.style.display = 'none';
+    hideError();
+    initializeScanner();
+  } else {
+    scanBtn.classList.remove('active');
+    manualBtn.classList.add('active');
+    scannerSection.style.display = 'none';
+    manualSection.style.display = 'block';
+    resetScanner();
   }
 }
 
 function handleTableScanned(tableNumber) {
-  if (!tableNumber || isNaN(tableNumber)) {
-    alert("باركود غير صالح، الرجاء المحاولة مرة أخرى");
+  tableNumber = tableNumber.trim();
+  
+  // Validate table number
+  if (!tableNumber || isNaN(tableNumber) || tableNumber <= 0) {
+    showError("رقم الطاولة غير صالح");
     return;
   }
-  
+
   currentTable = tableNumber;
   document.getElementById('table-input').style.display = 'none';
   document.getElementById('menu').style.display = 'block';
@@ -83,12 +148,17 @@ function handleTableScanned(tableNumber) {
 }
 
 function enterTableManually() {
-  const table = document.getElementById('tableNumber').value;
-  if (table) {
-    handleTableScanned(table);
-  } else {
-    alert("الرجاء إدخال رقم الطاولة");
+  const tableInput = document.getElementById('tableNumber');
+  const tableNumber = tableInput.value.trim();
+  
+  if (!tableNumber || isNaN(tableNumber) || tableNumber <= 0) {
+    showError("الرجاء إدخال رقم طاولة صحيح");
+    tableInput.focus();
+    return;
   }
+  
+  handleTableScanned(tableNumber);
+  tableInput.value = ''; // Clear input after submission
 }
 
 function loadMenu() {
@@ -97,7 +167,7 @@ function loadMenu() {
     itemsDiv.innerHTML = '';
     const items = snapshot.val();
     
-    if (!items || Object.keys(items).length === 0) {
+    if (!items) {
       itemsDiv.innerHTML = `
         <div class="empty-menu">
           <i class="fas fa-utensils"></i>
@@ -107,7 +177,7 @@ function loadMenu() {
       return;
     }
     
-    for (let key in items) {
+    Object.keys(items).forEach(key => {
       const item = items[key];
       const itemElement = document.createElement('div');
       itemElement.className = 'menu-item';
@@ -130,7 +200,7 @@ function loadMenu() {
         </div>
       `;
       itemsDiv.appendChild(itemElement);
-    }
+    });
   });
 }
 
@@ -149,6 +219,11 @@ function decrementQuantity(itemId) {
 }
 
 function submitOrder() {
+  if (!currentTable) {
+    showError("الرجاء تحديد رقم الطاولة أولاً");
+    return;
+  }
+
   const order = { 
     table: currentTable, 
     items: [],
@@ -160,32 +235,42 @@ function submitOrder() {
     const items = snapshot.val();
     let hasItems = false;
     
-    for (let key in items) {
+    Object.keys(items).forEach(key => {
       const qty = parseInt(document.getElementById(`qty-value-${key}`).textContent) || 0;
-      const note = document.getElementById(`note-${key}`).value;
+      const note = document.getElementById(`note-${key}`).value.trim();
+      
       if (qty > 0) {
         hasItems = true;
         order.items.push({
           name: items[key].name,
-          price: items[key].price,
+          price: parseFloat(items[key].price),
           qty: qty,
           note: note
         });
       }
-    }
+    });
     
     if (!hasItems) {
-      alert("الرجاء إضافة كمية لعنصر واحد على الأقل");
+      showError("الرجاء إضافة كمية لعنصر واحد على الأقل");
       return;
     }
     
-    db.ref("orders").push(order);
-    showOrderSummary(order);
+    db.ref("orders").push(order)
+      .then(() => {
+        showOrderSummary(order);
+      })
+      .catch(error => {
+        console.error("Error submitting order:", error);
+        showError("حدث خطأ أثناء إرسال الطلب، الرجاء المحاولة مرة أخرى");
+      });
   });
 }
 
 function showOrderSummary(order) {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
   document.getElementById('menu').style.display = 'none';
+  document.getElementById('order-summary').style.display = 'block';
   document.getElementById('summary-table').textContent = order.table;
   
   const itemsDiv = document.getElementById('summary-items');
@@ -204,64 +289,61 @@ function showOrderSummary(order) {
   });
   
   itemsDiv.innerHTML += `<br><div class="summary-total">المجموع: ${total.toFixed(2)} جنيه</div>`;
-  
-  document.getElementById('order-summary').style.display = 'block';
 }
 
 function goBack() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
   document.getElementById('menu').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
-  document.querySelector('.fallback-input').style.display = 'none';
   currentTable = null;
   
-  if (scanner) {
-    scanner.stop().then(() => {
-      console.log("Scanner stopped successfully");
-      scanner.clear();
-      scanner = null;
-      isScannerActive = false;
-      initializeScanner();
-    }).catch(error => {
-      console.error("Failed to stop scanner", error);
-      scanner.clear();
-      scanner = null;
-      isScannerActive = false;
-      initializeScanner();
-    });
-  } else {
-    initializeScanner();
-  }
+  resetScanner();
+  setInputMode('scan');
 }
 
 function newOrder() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
   document.getElementById('order-summary').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   currentTable = null;
   
-  if (scanner) {
-    scanner.stop().then(() => {
-      console.log("Scanner stopped successfully");
-      scanner.clear();
-      scanner = null;
-      isScannerActive = false;
-      initializeScanner();
-    }).catch(error => {
-      console.error("Failed to stop scanner", error);
-      scanner.clear();
-      scanner = null;
-      isScannerActive = false;
-      initializeScanner();
-    });
-  } else {
-    initializeScanner();
-  }
+  resetScanner();
+  setInputMode('scan');
 }
 
-// تهيئة الماسح عند تحميل الصفحة
+function resetScanner() {
+  clearScannerRetryTimer();
+  if (scanner) {
+    scanner.clear().catch(error => {
+      console.error("Failed to clear scanner:", error);
+    });
+    scanner = null;
+  }
+  isScannerActive = false;
+  flashEnabled = false;
+}
+
+function showError(message) {
+  const errorElement = document.getElementById('input-error');
+  errorElement.textContent = message;
+  errorElement.style.display = 'block';
+  setTimeout(hideError, 5000);
+}
+
+function hideError() {
+  document.getElementById('input-error').style.display = 'none';
+}
+
+// Initialize scanner when page loads
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
-  // إضافة حدث لزر الإدخال اليدوي
+  // Add event listeners
+  document.getElementById('manual-mode-btn').addEventListener('click', () => setInputMode('manual'));
+  document.getElementById('scan-mode-btn').addEventListener('click', () => setInputMode('scan'));
+  
   document.getElementById('tableNumber').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       enterTableManually();
@@ -269,10 +351,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// تصدير الدوال للوصول إليها من HTML
+// Export functions to global scope
 window.enterTableManually = enterTableManually;
-window.goBack = goBack;
-window.newOrder = newOrder;
 window.incrementQuantity = incrementQuantity;
 window.decrementQuantity = decrementQuantity;
 window.submitOrder = submitOrder;
+window.goBack = goBack;
+window.newOrder = newOrder;
+window.setInputMode = setInputMode;
+window.toggleFlash = toggleFlash;
