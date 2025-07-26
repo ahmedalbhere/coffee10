@@ -24,14 +24,14 @@ function initializeScanner() {
       disableFlip: false
     });
 
-    const successCallback = (tableNumber) => {
+    const successCallback = (decodedText) => {
       isScannerActive = false;
       scanner.clear().then(() => {
         console.log("QR Scanner stopped successfully");
-        handleTableScanned(tableNumber);
+        handleTableScanned(decodedText);
       }).catch(err => {
         console.error("Failed to stop scanner", err);
-        handleTableScanned(tableNumber);
+        handleTableScanned(decodedText);
       });
     };
 
@@ -63,11 +63,15 @@ function handleTableScanned(tableNumber) {
 }
 
 function enterTableManually() {
-  const table = document.getElementById('tableNumber').value;
-  if (table) {
+  const tableInput = document.getElementById('tableNumber');
+  const table = tableInput.value.trim();
+  
+  if (table && !isNaN(table) {
     handleTableScanned(table);
+    tableInput.value = ''; // مسح الحقل بعد الإدخال
   } else {
-    alert("الرجاء إدخال رقم الطاولة");
+    alert("الرجاء إدخال رقم طاولة صحيح");
+    tableInput.focus();
   }
 }
 
@@ -142,12 +146,12 @@ function submitOrder() {
     
     for (let key in items) {
       const qty = parseInt(document.getElementById(`qty-value-${key}`).textContent) || 0;
-      const note = document.getElementById(`note-${key}`).value;
+      const note = document.getElementById(`note-${key}`).value.trim();
       if (qty > 0) {
         hasItems = true;
         order.items.push({
           name: items[key].name,
-          price: items[key].price,
+          price: parseFloat(items[key].price),
           qty: qty,
           note: note
         });
@@ -159,13 +163,19 @@ function submitOrder() {
       return;
     }
     
-    db.ref("orders").push(order);
-    showOrderSummary(order);
+    db.ref("orders").push(order)
+      .then(() => {
+        showOrderSummary(order);
+      })
+      .catch(error => {
+        console.error("Error submitting order:", error);
+        alert("حدث خطأ أثناء إرسال الطلب، الرجاء المحاولة مرة أخرى");
+      });
   });
 }
 
 function showOrderSummary(order) {
-  window.scrollTo(0, 0); // التمرير إلى أعلى الصفحة
+  window.scrollTo({ top: 0, behavior: 'smooth' }); // التمرير السلس إلى أعلى الصفحة
   
   document.getElementById('menu').style.display = 'none';
   document.getElementById('summary-table').textContent = order.table;
@@ -191,6 +201,8 @@ function showOrderSummary(order) {
 }
 
 function goBack() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
   document.getElementById('menu').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   document.querySelector('.fallback-input').style.display = 'none';
@@ -207,7 +219,7 @@ function goBack() {
 }
 
 function newOrder() {
-  window.scrollTo(0, 0); // التمرير إلى أعلى الصفحة
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   
   document.getElementById('order-summary').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
@@ -234,3 +246,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// تصدير الدوال للوصول إليها من HTML
+window.enterTableManually = enterTableManually;
+window.incrementQuantity = incrementQuantity;
+window.decrementQuantity = decrementQuantity;
+window.submitOrder = submitOrder;
+window.goBack = goBack;
+window.newOrder = newOrder;
