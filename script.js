@@ -9,6 +9,7 @@ const db = firebase.database();
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
+let flashEnabled = false;
 
 // Set current year in footer
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -45,7 +46,11 @@ function initializeScanner() {
 
     const errorCallback = (error) => {
       console.log("QR Scanner error:", error);
-      document.querySelector('.fallback-input').style.display = 'block';
+      showError("تعذر تشغيل الماسح الضوئي، الرجاء استخدام الإدخال اليدوي");
+      document.getElementById('scanner-section').style.display = 'none';
+      document.getElementById('manual-input-section').style.display = 'block';
+      document.getElementById('scan-mode-btn').classList.remove('active');
+      document.getElementById('manual-mode-btn').classList.add('active');
     };
 
     scanner.render(successCallback, errorCallback);
@@ -53,16 +58,70 @@ function initializeScanner() {
     
   } catch (error) {
     console.error("Scanner initialization error:", error);
-    document.querySelector('.fallback-input').style.display = 'block';
+    showError("تعذر تشغيل الماسح الضوئي، الرجاء استخدام الإدخال اليدوي");
+    document.getElementById('scanner-section').style.display = 'none';
+    document.getElementById('manual-input-section').style.display = 'block';
+    document.getElementById('scan-mode-btn').classList.remove('active');
+    document.getElementById('manual-mode-btn').classList.add('active');
   }
+}
+
+function toggleFlash() {
+  if (!scanner || !isScannerActive) return;
+  
+  flashEnabled = !flashEnabled;
+  const flashBtn = document.getElementById('flash-toggle');
+  
+  try {
+    if (flashEnabled) {
+      scanner.applyVideoConstraints({
+        advanced: [{torch: true}]
+      });
+      flashBtn.classList.add('active');
+      flashBtn.innerHTML = '<i class="fas fa-lightbulb"></i>';
+    } else {
+      scanner.applyVideoConstraints({
+        advanced: [{torch: false}]
+      });
+      flashBtn.classList.remove('active');
+      flashBtn.innerHTML = '<i class="far fa-lightbulb"></i>';
+    }
+  } catch (error) {
+    console.error("Error toggling flash:", error);
+    showError("تعذر تشغيل الفلاش في هذا المتصفح");
+  }
+}
+
+function setInputMode(mode) {
+  const scanBtn = document.getElementById('scan-mode-btn');
+  const manualBtn = document.getElementById('manual-mode-btn');
+  const scannerSection = document.getElementById('scanner-section');
+  const manualSection = document.getElementById('manual-input-section');
+  
+  if (mode === 'scan') {
+    scanBtn.classList.add('active');
+    manualBtn.classList.remove('active');
+    scannerSection.style.display = 'block';
+    manualSection.style.display = 'none';
+    resetScanner();
+    initializeScanner();
+  } else {
+    scanBtn.classList.remove('active');
+    manualBtn.classList.add('active');
+    scannerSection.style.display = 'none';
+    manualSection.style.display = 'block';
+    resetScanner();
+  }
+  
+  hideError();
 }
 
 function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
   // Validate table number
-  if (!tableNumber || isNaN(tableNumber) || tableNumber <= 0) {
-    alert("الرجاء مسح باركود صالح أو إدخال رقم طاولة صحيح");
+  if (!tableNumber || isNaN(tableNumber) || tableNumber <= 0 || tableNumber > 100) {
+    showError("رقم الطاولة يجب أن يكون بين 1 و 100");
     return;
   }
 
@@ -78,8 +137,8 @@ function enterTableManually() {
   const tableInput = document.getElementById('tableNumber');
   const tableNumber = tableInput.value.trim();
   
-  if (!tableNumber || isNaN(tableNumber) || tableNumber <= 0) {
-    alert("الرجاء إدخال رقم طاولة صحيح (رقم أكبر من الصفر)");
+  if (!tableNumber || isNaN(tableNumber) || tableNumber <= 0 || tableNumber > 100) {
+    showError("الرجاء إدخال رقم طاولة صحيح بين 1 و 100");
     tableInput.focus();
     return;
   }
@@ -147,7 +206,7 @@ function decrementQuantity(itemId) {
 
 function submitOrder() {
   if (!currentTable) {
-    alert("الرجاء تحديد رقم الطاولة أولاً");
+    showError("الرجاء تحديد رقم الطاولة أولاً");
     return;
   }
 
@@ -178,7 +237,7 @@ function submitOrder() {
     });
     
     if (!hasItems) {
-      alert("الرجاء إضافة كمية لعنصر واحد على الأقل");
+      showError("الرجاء إضافة كمية لعنصر واحد على الأقل");
       return;
     }
     
@@ -188,7 +247,7 @@ function submitOrder() {
       })
       .catch(error => {
         console.error("Error submitting order:", error);
-        alert("حدث خطأ أثناء إرسال الطلب، الرجاء المحاولة مرة أخرى");
+        showError("حدث خطأ أثناء إرسال الطلب، الرجاء المحاولة مرة أخرى");
       });
   });
 }
@@ -225,11 +284,10 @@ function goBack() {
   
   document.getElementById('menu').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
-  document.querySelector('.fallback-input').style.display = 'none';
   currentTable = null;
   
   resetScanner();
-  initializeScanner();
+  setInputMode('scan');
 }
 
 function newOrder() {
@@ -241,7 +299,7 @@ function newOrder() {
   currentTable = null;
   
   resetScanner();
-  initializeScanner();
+  setInputMode('scan');
 }
 
 function resetScanner() {
@@ -252,6 +310,18 @@ function resetScanner() {
     scanner = null;
   }
   isScannerActive = false;
+  flashEnabled = false;
+}
+
+function showError(message) {
+  const errorElement = document.getElementById('input-error');
+  errorElement.textContent = message;
+  errorElement.style.display = 'block';
+  setTimeout(hideError, 5000);
+}
+
+function hideError() {
+  document.getElementById('input-error').style.display = 'none';
 }
 
 // Initialize scanner when page loads
@@ -259,7 +329,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
   // Add event listener for manual table input button
-  document.querySelector('.fallback-input button').addEventListener('click', enterTableManually);
+  document.getElementById('manual-mode-btn').addEventListener('click', () => setInputMode('manual'));
+  document.getElementById('scan-mode-btn').addEventListener('click', () => setInputMode('scan'));
   
   // Add event listener for Enter key in manual input
   document.getElementById('tableNumber').addEventListener('keypress', (e) => {
@@ -276,3 +347,5 @@ window.decrementQuantity = decrementQuantity;
 window.submitOrder = submitOrder;
 window.goBack = goBack;
 window.newOrder = newOrder;
+window.setInputMode = setInputMode;
+window.toggleFlash = toggleFlash;
