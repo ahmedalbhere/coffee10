@@ -14,7 +14,7 @@ const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاول�
 // تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// إدارة الماسح الضوئي
+// إدارة الماسح الضوئي (معدّل للباركود فقط)
 function initializeScanner() {
   if (isScannerActive) return;
   isScannerActive = true;
@@ -29,11 +29,12 @@ function initializeScanner() {
       "scanner",
       {
         fps: 30,
-        qrbox: { width: 250, height: 250 },
+        qrbox: { width: 250, height: 100 }, // حجم مناسب للباركود
         aspectRatio: 1.0,
         disableFlip: false,
         rememberLastUsedCamera: true,
-        showTorchButtonIfSupported: true
+        showTorchButtonIfSupported: true,
+        formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128 ] // دعم باركود CODE_128 فقط
       },
       false
     );
@@ -44,22 +45,34 @@ function initializeScanner() {
       },
       (error) => {
         handleScanError(error);
+      },
+      {
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128] // تحديد دعم الباركود فقط
       }
     );
   } catch (error) {
-    console.error("Scanner initialization failed:", error);
+    console.error("فشل تهيئة الماسح:", error);
     handleScanError(error);
   }
 }
 
+// معالجة المسح الناجح (مع تحقق من صحة الباركود)
 function handleScanSuccess(decodedText) {
+  // تحقق من أن الباركود يحتوي على أرقام فقط
+  if (!/^\d+$/.test(decodedText)) {
+    alert("الرجاء مسح باركود صالح (يجب أن يحتوي على أرقام فقط)");
+    scanner.resume().catch(console.error);
+    return;
+  }
+
   scanner.pause().then(() => {
     handleTableScanned(decodedText);
   }).catch(console.error);
 }
 
 function handleScanError(error) {
-  console.error("Scan error:", error);
+  console.error("خطأ في المسح:", error);
   document.querySelector('.fallback-input').style.display = 'block';
   isScannerActive = false;
   
@@ -76,7 +89,7 @@ function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
   if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء مسح باركود صالح");
+    alert("الرجاء مسح باركود صالح (يجب أن يكون رقمًا)");
     scanner.resume().catch(console.error);
     return;
   }
@@ -203,7 +216,7 @@ function submitOrderToFirebase(items) {
       showOrderSummary(order);
     })
     .catch(error => {
-      console.error("Order submission error:", error);
+      console.error("خطأ في إرسال الطلب:", error);
       alert("حدث خطأ أثناء إرسال الطلب");
     });
 }
@@ -307,3 +320,9 @@ function enterTableManually() {
   handleTableScanned(tableNumber);
   document.getElementById('tableNumber').value = '';
 }
+
+// تصدير الدوال للوصول إليها من HTML
+window.enterTableManually = enterTableManually;
+window.goBack = goBack;
+window.newOrder = newOrder;
+window.submitOrder = submitOrder;
