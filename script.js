@@ -2,202 +2,55 @@ const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// Global variables
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
-let flashEnabled = false;
-let currentStream = null;
-let inputMode = 'scan';
 
-// Initialize the page
+// تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
 
-/**
- * Set input mode (scan or manual)
- */
-function setInputMode(mode) {
-  inputMode = mode;
+// تهيئة ماسح الباركود
+function initializeScanner() {
+  if (isScannerActive) return;
   
-  if (mode === 'scan') {
-    document.getElementById('scan-mode-btn').classList.add('active');
-    document.getElementById('manual-mode-btn').classList.remove('active');
-    document.getElementById('scanner-section').style.display = 'block';
-    document.getElementById('manual-input-section').style.display = 'none';
-    initializeScanner();
-  } else {
-    document.getElementById('scan-mode-btn').classList.remove('active');
-    document.getElementById('manual-mode-btn').classList.add('active');
-    document.getElementById('scanner-section').style.display = 'none';
-    document.getElementById('manual-input-section').style.display = 'block';
-    stopScanner();
-    document.getElementById('tableNumber').focus();
-  }
-  
-  hideError();
-}
-
-/**
- * Initialize the barcode scanner
- */
-async function initializeScanner() {
-  if (isScannerActive || inputMode !== 'scan') {
-    console.log('Scanner is already active or not in scan mode');
-    return;
-  }
-
-  const scannerElement = document.getElementById('scanner');
-  scannerElement.innerHTML = '<div class="scanner-loading"><i class="fas fa-spinner fa-spin"></i> جارٍ تهيئة الماسح...</div>';
-
   try {
-    // Check camera permissions first
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    currentStream = stream;
-    
-    // Stop any existing tracks
-    stream.getTracks().forEach(track => track.stop());
+    scanner = new Html5QrcodeScanner("scanner", {
+      fps: 10,
+      qrbox: 250,
+      aspectRatio: 1.0,
+      disableFlip: false
+    });
 
-    const formatsToSupport = [
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.CODE_93,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.ITF
-    ];
-
-    scanner = new Html5QrcodeScanner(
-      "scanner",
-      {
-        fps: 10,
-        qrbox: 250,
-        aspectRatio: 1.0,
-        disableFlip: false,
-        formatsToSupport: formatsToSupport,
-        rememberLastUsedCamera: true
-      },
-      false
-    );
-
-    const successCallback = async (decodedText) => {
-      if (!isScannerActive) return;
-      
-      console.log('Barcode scanned:', decodedText);
-      await stopScanner();
-      handleTableScanned(decodedText);
+    const successCallback = (tableNumber) => {
+      isScannerActive = false;
+      scanner.clear().then(() => {
+        console.log("QR Scanner stopped successfully");
+        handleTableScanned(tableNumber);
+      }).catch(err => {
+        console.error("Failed to stop scanner", err);
+        handleTableScanned(tableNumber);
+      });
     };
 
     const errorCallback = (error) => {
-      console.error('Scanner error:', error);
-      if (!error.message.includes('NotFoundException')) {
-        showScannerError(error);
-      }
+      console.error("QR Scanner error:", error);
+      document.querySelector('.fallback-input').style.display = 'block';
     };
 
-    await scanner.render(successCallback, errorCallback);
+    scanner.render(successCallback, errorCallback);
     isScannerActive = true;
-    console.log('Scanner initialized successfully');
-    
   } catch (error) {
-    console.error('Scanner initialization failed:', error);
-    showScannerError(error);
+    console.error("Scanner initialization error:", error);
+    document.querySelector('.fallback-input').style.display = 'block';
   }
 }
 
-/**
- * Stop the scanner and clean up resources
- */
-async function stopScanner() {
-  if (!scanner || !isScannerActive) return;
-  
-  console.log('Stopping scanner...');
-  isScannerActive = false;
-  flashEnabled = false;
-  document.getElementById('flash-toggle')?.classList.remove('active');
-
-  try {
-    await scanner.clear();
-    scanner = null;
-    
-    if (currentStream) {
-      currentStream.getTracks().forEach(track => track.stop());
-      currentStream = null;
-    }
-    
-    console.log('Scanner stopped successfully');
-  } catch (err) {
-    console.error('Failed to stop scanner:', err);
-    throw err;
-  }
-}
-
-/**
- * Show scanner error message
- */
-function showScannerError(error) {
-  const scannerElement = document.getElementById('scanner');
-  scannerElement.innerHTML = `
-    <div class="scanner-error">
-      <i class="fas fa-exclamation-triangle"></i>
-      <p>تعذر تشغيل الماسح الضوئي</p>
-      <p>${error.message || 'حدث خطأ غير متوقع'}</p>
-      <button onclick="retryScanner()" class="btn-secondary">
-        <i class="fas fa-redo"></i> إعادة المحاولة
-      </button>
-    </div>
-  `;
-}
-
-/**
- * Retry initializing the scanner
- */
-async function retryScanner() {
-  await stopScanner();
-  initializeScanner();
-}
-
-/**
- * Toggle camera flash
- */
-async function toggleFlash() {
-  if (!scanner || !isScannerActive) {
-    alert("يجب تشغيل الماسح أولاً");
-    return;
-  }
-
-  const flashBtn = document.getElementById('flash-toggle');
-  
-  try {
-    flashEnabled = !flashEnabled;
-    
-    if (flashEnabled) {
-      await scanner.applyVideoConstraints({ advanced: [{torch: true}] });
-      flashBtn.classList.add('active');
-    } else {
-      await scanner.applyVideoConstraints({ advanced: [{torch: false}] });
-      flashBtn.classList.remove('active');
-    }
-  } catch (error) {
-    console.error("Flash control error:", error);
-    alert("هذا المتصفح أو الجهاز لا يدعم تشغيل الفلاش");
-    flashEnabled = false;
-    flashBtn.classList.remove('active');
-  }
-}
-
-/**
- * Handle scanned table number
- */
 function handleTableScanned(tableNumber) {
   if (!tableNumber || isNaN(tableNumber)) {
-    showError("باركود غير صالح، الرجاء المحاولة مرة أخرى");
-    initializeScanner();
+    alert("باركود غير صالح، الرجاء المحاولة مرة أخرى");
     return;
   }
   
@@ -209,49 +62,15 @@ function handleTableScanned(tableNumber) {
   loadMenu();
 }
 
-/**
- * Enter table number manually
- */
 function enterTableManually() {
-  const tableNumberInput = document.getElementById('tableNumber');
-  const tableNumber = tableNumberInput.value.trim();
-  
-  if (!tableNumber) {
-    showError('الرجاء إدخال رقم الطاولة');
-    tableNumberInput.focus();
-    return;
+  const table = document.getElementById('tableNumber').value;
+  if (table) {
+    handleTableScanned(table);
+  } else {
+    alert("الرجاء إدخال رقم الطاولة");
   }
-  
-  const tableNum = parseInt(tableNumber);
-  if (isNaN(tableNum) || tableNum < 1 || tableNum > 100) {
-    showError('رقم الطاولة يجب أن يكون بين 1 و 100');
-    tableNumberInput.focus();
-    return;
-  }
-  
-  hideError();
-  handleTableScanned(tableNumber);
 }
 
-/**
- * Show error message
- */
-function showError(message) {
-  const errorElement = document.getElementById('input-error');
-  errorElement.textContent = message;
-  errorElement.classList.add('show');
-}
-
-/**
- * Hide error message
- */
-function hideError() {
-  document.getElementById('input-error').classList.remove('show');
-}
-
-/**
- * Load menu items from Firebase
- */
 function loadMenu() {
   db.ref("menu").on("value", snapshot => {
     const itemsDiv = document.getElementById('menu-items');
@@ -295,18 +114,12 @@ function loadMenu() {
   });
 }
 
-/**
- * Increase item quantity
- */
 function incrementQuantity(itemId) {
   const qtyElement = document.getElementById(`qty-value-${itemId}`);
   let currentQty = parseInt(qtyElement.textContent) || 0;
   qtyElement.textContent = currentQty + 1;
 }
 
-/**
- * Decrease item quantity
- */
 function decrementQuantity(itemId) {
   const qtyElement = document.getElementById(`qty-value-${itemId}`);
   let currentQty = parseInt(qtyElement.textContent) || 0;
@@ -315,10 +128,7 @@ function decrementQuantity(itemId) {
   }
 }
 
-/**
- * Submit order to Firebase
- */
-async function submitOrder() {
+function submitOrder() {
   const order = { 
     table: currentTable, 
     items: [],
@@ -326,37 +136,37 @@ async function submitOrder() {
     timestamp: firebase.database.ServerValue.TIMESTAMP
   };
   
-  const snapshot = await db.ref("menu").once("value");
-  const items = snapshot.val();
-  let hasItems = false;
-  
-  for (let key in items) {
-    const qty = parseInt(document.getElementById(`qty-value-${key}`).textContent) || 0;
-    const note = document.getElementById(`note-${key}`).value;
-    if (qty > 0) {
-      hasItems = true;
-      order.items.push({
-        name: items[key].name,
-        price: parseFloat(items[key].price),
-        qty: qty,
-        note: note
-      });
+  db.ref("menu").once("value").then(snapshot => {
+    const items = snapshot.val();
+    let hasItems = false;
+    
+    for (let key in items) {
+      const qty = parseInt(document.getElementById(`qty-value-${key}`).textContent) || 0;
+      const note = document.getElementById(`note-${key}`).value;
+      if (qty > 0) {
+        hasItems = true;
+        order.items.push({
+          name: items[key].name,
+          price: items[key].price,
+          qty: qty,
+          note: note
+        });
+      }
     }
-  }
-  
-  if (!hasItems) {
-    alert("الرجاء إضافة كمية لعنصر واحد على الأقل");
-    return;
-  }
-  
-  await db.ref("orders").push(order);
-  showOrderSummary(order);
+    
+    if (!hasItems) {
+      alert("الرجاء إضافة كمية لعنصر واحد على الأقل");
+      return;
+    }
+    
+    db.ref("orders").push(order);
+    showOrderSummary(order);
+  });
 }
 
-/**
- * Show order confirmation
- */
 function showOrderSummary(order) {
+  window.scrollTo(0, 0); // التمرير إلى أعلى الصفحة
+  
   document.getElementById('menu').style.display = 'none';
   document.getElementById('summary-table').textContent = order.table;
   
@@ -376,54 +186,51 @@ function showOrderSummary(order) {
   });
   
   itemsDiv.innerHTML += `<br><div class="summary-total">المجموع: ${total.toFixed(2)} جنيه</div>`;
+  
   document.getElementById('order-summary').style.display = 'block';
 }
 
-/**
- * Go back to scanner
- */
-async function goBack() {
-  await stopScanner();
+function goBack() {
   document.getElementById('menu').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
+  document.querySelector('.fallback-input').style.display = 'none';
   currentTable = null;
-  setInputMode('scan');
+  
+  if (scanner) {
+    scanner.clear().catch(error => {
+      console.error("Failed to clear scanner", error);
+    });
+    scanner = null;
+  }
+  isScannerActive = false;
+  initializeScanner();
 }
 
-/**
- * Start a new order
- */
-async function newOrder() {
-  await stopScanner();
+function newOrder() {
+  window.scrollTo(0, 0); // التمرير إلى أعلى الصفحة
+  
   document.getElementById('order-summary').style.display = 'none';
   document.getElementById('table-input').style.display = 'block';
   currentTable = null;
-  setInputMode('scan');
+  
+  if (scanner) {
+    scanner.clear().catch(error => {
+      console.error("Failed to clear scanner", error);
+    });
+    scanner = null;
+  }
+  isScannerActive = false;
+  initializeScanner();
 }
 
-// Event listeners
+// تهيئة الماسح عند تحميل الصفحة
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
+  // إضافة حدث لزر الإدخال اليدوي
   document.getElementById('tableNumber').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       enterTableManually();
     }
   });
 });
-
-// Clean up on page exit
-window.addEventListener('beforeunload', async () => {
-  await stopScanner();
-});
-
-// Make functions available globally
-window.setInputMode = setInputMode;
-window.enterTableManually = enterTableManually;
-window.toggleFlash = toggleFlash;
-window.retryScanner = retryScanner;
-window.goBack = goBack;
-window.newOrder = newOrder;
-window.submitOrder = submitOrder;
-window.incrementQuantity = incrementQuantity;
-window.decrementQuantity = decrementQuantity;
