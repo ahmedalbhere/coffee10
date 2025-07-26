@@ -1,15 +1,24 @@
+// config.js
 const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
-// Initialize Firebase
+// app.js
+// تعريف أنواع المسح
+const Html5QrcodeScanType = {
+  SCAN_TYPE_CAMERA: "SCAN_TYPE_CAMERA",
+  SCAN_TYPE_FILE: "SCAN_TYPE_FILE",
+  SCAN_TYPE_BARCODE: "SCAN_TYPE_BARCODE"
+};
+
+// تهيئة Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
-const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
+const SCANNER_INTERVAL = 30000; // 30 ثانية بين كل مسح
 
 // تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -19,7 +28,6 @@ function initializeScanner() {
   if (isScannerActive) return;
   isScannerActive = true;
 
-  // تنظيف الماسح السابق إذا كان موجوداً
   if (scanner) {
     scanner.clear().catch(console.error);
   }
@@ -28,47 +36,59 @@ function initializeScanner() {
     scanner = new Html5QrcodeScanner(
       "scanner",
       {
-        fps: 30,
+        fps: 10, // تقليل معدل الإطارات للحفاظ على البطارية
         qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_BARCODE], // مسح الباركود فقط
         disableFlip: false,
         rememberLastUsedCamera: true,
-        showTorchButtonIfSupported: true
+        showTorchButtonIfSupported: true // تفعيل زر الفلاش
       },
       false
     );
 
-    scanner.render(
-      (decodedText) => {
-        handleScanSuccess(decodedText);
-      },
-      (error) => {
-        handleScanError(error);
+    // تفعيل الفلاش إذا كان متاحًا
+    scanner.getState().then(state => {
+      if (state.torchAvailable) {
+        scanner.toggleTorch(); // تشغيل الفلاش تلقائيًا
       }
-    );
+    }).catch(console.error);
+
+    startScanningCycle();
+
   } catch (error) {
-    console.error("Scanner initialization failed:", error);
+    console.error("فشل تهيئة الماسح:", error);
     handleScanError(error);
   }
 }
 
-function handleScanSuccess(decodedText) {
-  scanner.pause().then(() => {
+function startScanningCycle() {
+  scanner.render(
+    async (decodedText) => {
+      await handleScanSuccess(decodedText);
+      // بعد المعالجة الناجحة، انتظر 30 ثانية ثم أعد المسح
+      setTimeout(startScanningCycle, SCANNER_INTERVAL);
+    },
+    (error) => {
+      handleScanError(error);
+      // في حالة الخطأ، انتظر 30 ثانية ثم أعد المحاولة
+      setTimeout(startScanningCycle, SCANNER_INTERVAL);
+    }
+  );
+}
+
+async function handleScanSuccess(decodedText) {
+  try {
+    await scanner.pause();
     handleTableScanned(decodedText);
-  }).catch(console.error);
+  } catch (error) {
+    console.error("خطأ في إيقاف الماسح:", error);
+  }
 }
 
 function handleScanError(error) {
-  console.error("Scan error:", error);
+  console.error("خطأ في المسح:", error);
   document.querySelector('.fallback-input').style.display = 'block';
   isScannerActive = false;
-  
-  // إعادة المحاولة بعد 30 ثانية
-  setTimeout(() => {
-    if (document.getElementById('scanner-section').style.display !== 'none') {
-      initializeScanner();
-    }
-  }, SCANNER_RETRY_DELAY);
 }
 
 // إدارة الطاولات
@@ -203,7 +223,7 @@ function submitOrderToFirebase(items) {
       showOrderSummary(order);
     })
     .catch(error => {
-      console.error("Order submission error:", error);
+      console.error("خطأ في إرسال الطلب:", error);
       alert("حدث خطأ أثناء إرسال الطلب");
     });
 }
@@ -271,11 +291,23 @@ function resetScanner() {
   }
 }
 
+// إدارة الوضع اليدوي
+function enterTableManually() {
+  const tableNumber = document.getElementById('tableNumber').value.trim();
+  
+  if (!tableNumber || isNaN(tableNumber)) {
+    alert("الرجاء إدخال رقم طاولة صحيح");
+    return;
+  }
+  
+  handleTableScanned(tableNumber);
+  document.getElementById('tableNumber').value = '';
+}
+
 // تهيئة الصفحة
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
-  // إضافة مستمع للأحداث للوضع اليدوي
   document.getElementById('manual-mode-btn')?.addEventListener('click', () => {
     document.getElementById('scanner-section').style.display = 'none';
     document.getElementById('manual-input-section').style.display = 'block';
@@ -294,16 +326,3 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
-
-// الدوال العامة
-function enterTableManually() {
-  const tableNumber = document.getElementById('tableNumber').value.trim();
-  
-  if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء إدخال رقم طاولة صحيح");
-    return;
-  }
-  
-  handleTableScanned(tableNumber);
-  document.getElementById('tableNumber').value = '';
-}
