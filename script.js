@@ -79,7 +79,7 @@ function enterTableManually() {
   const tableNumber = tableInput.value.trim();
   
   if (!tableNumber || isNaN(tableNumber) || tableNumber <= 0) {
-    alert("الرجاء إدخال رقم طاولة صحيح");
+    alert("الرجاء إدخال رقم طاولة صحيح (رقم أكبر من الصفر)");
     tableInput.focus();
     return;
   }
@@ -258,7 +258,10 @@ function resetScanner() {
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
-  // Add event listener for manual table input
+  // Add event listener for manual table input button
+  document.querySelector('.fallback-input button').addEventListener('click', enterTableManually);
+  
+  // Add event listener for Enter key in manual input
   document.getElementById('tableNumber').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       enterTableManually();
