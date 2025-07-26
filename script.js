@@ -2,6 +2,7 @@ const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
@@ -9,10 +10,10 @@ let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
 
-// تهيئة السنة في التذييل
+// Set current year in footer
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// تهيئة ماسح الباركود
+// Initialize QR Scanner
 function initializeScanner() {
   if (isScannerActive) return;
   
@@ -49,11 +50,13 @@ function initializeScanner() {
 }
 
 function handleTableScanned(tableNumber) {
+  // Validate table number
+  tableNumber = tableNumber.trim();
   if (!tableNumber || isNaN(tableNumber)) {
-    alert("باركود غير صالح، الرجاء المحاولة مرة أخرى");
+    alert("الرجاء مسح باركود صالح أو إدخال رقم طاولة صحيح");
     return;
   }
-  
+
   currentTable = tableNumber;
   document.getElementById('table-input').style.display = 'none';
   document.getElementById('menu').style.display = 'block';
@@ -64,15 +67,15 @@ function handleTableScanned(tableNumber) {
 
 function enterTableManually() {
   const tableInput = document.getElementById('tableNumber');
-  const table = tableInput.value.trim();
+  const tableNumber = tableInput.value.trim();
   
-  if (table && !isNaN(table) {
-    handleTableScanned(table);
-    tableInput.value = ''; // مسح الحقل بعد الإدخال
-  } else {
+  if (!tableNumber || isNaN(tableNumber)) {
     alert("الرجاء إدخال رقم طاولة صحيح");
     tableInput.focus();
+    return;
   }
+  
+  handleTableScanned(tableNumber);
 }
 
 function loadMenu() {
@@ -133,6 +136,11 @@ function decrementQuantity(itemId) {
 }
 
 function submitOrder() {
+  if (!currentTable) {
+    alert("الرجاء تحديد رقم الطاولة أولاً");
+    return;
+  }
+
   const order = { 
     table: currentTable, 
     items: [],
@@ -175,7 +183,7 @@ function submitOrder() {
 }
 
 function showOrderSummary(order) {
-  window.scrollTo({ top: 0, behavior: 'smooth' }); // التمرير السلس إلى أعلى الصفحة
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   
   document.getElementById('menu').style.display = 'none';
   document.getElementById('summary-table').textContent = order.table;
@@ -235,11 +243,11 @@ function newOrder() {
   initializeScanner();
 }
 
-// تهيئة الماسح عند تحميل الصفحة
+// Initialize scanner when page loads
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
-  // إضافة حدث لزر الإدخال اليدوي
+  // Add event listener for manual table input
   document.getElementById('tableNumber').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       enterTableManually();
@@ -247,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// تصدير الدوال للوصول إليها من HTML
+// Export functions to global scope
 window.enterTableManually = enterTableManually;
 window.incrementQuantity = incrementQuantity;
 window.decrementQuantity = decrementQuantity;
