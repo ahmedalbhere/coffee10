@@ -1,4 +1,3 @@
-
 const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
@@ -107,23 +106,7 @@ function loadMenu() {
       `;
       return;
     }
-
-    // إنشاء قسم المشروبات الساخنة
-    const hotDiv = document.createElement('div');
-    hotDiv.className = 'menu-section';
-    hotDiv.innerHTML = '<h3 class="section-title"><i class="fas fa-mug-hot"></i> المشروبات الساخنة</h3>';
-    const hotItemsContainer = document.createElement('div');
-    hotItemsContainer.className = 'menu-items-container';
-    hotDiv.appendChild(hotItemsContainer);
-
-    // إنشاء قسم المشروبات الباردة
-    const coldDiv = document.createElement('div');
-    coldDiv.className = 'menu-section';
-    coldDiv.innerHTML = '<h3 class="section-title"><i class="fas fa-glass-whiskey"></i> المشروبات الباردة</h3>';
-    const coldItemsContainer = document.createElement('div');
-    coldItemsContainer.className = 'menu-items-container';
-    coldDiv.appendChild(coldItemsContainer);
-
+    
     for (let key in items) {
       const item = items[key];
       const itemElement = document.createElement('div');
@@ -146,31 +129,7 @@ function loadMenu() {
           <textarea id="note-${key}" class="item-note" placeholder="ملاحظات خاصة"></textarea>
         </div>
       `;
-
-      // تصنيف العناصر حسب النوع (ساخن/بارد)
-      if (item.type === 'hot') {
-        hotItemsContainer.appendChild(itemElement);
-      } else if (item.type === 'cold') {
-        coldItemsContainer.appendChild(itemElement);
-      }
-    }
-
-    // إضافة الأقسام فقط إذا كانت تحتوي على عناصر
-    if (hotItemsContainer.children.length > 0) {
-      itemsDiv.appendChild(hotDiv);
-    }
-    if (coldItemsContainer.children.length > 0) {
-      itemsDiv.appendChild(coldDiv);
-    }
-
-    // إظهار رسالة إذا لم يكن هناك عناصر
-    if (hotItemsContainer.children.length === 0 && coldItemsContainer.children.length === 0) {
-      itemsDiv.innerHTML = `
-        <div class="empty-menu">
-          <i class="fas fa-utensils"></i>
-          <p>لا توجد أصناف متاحة حالياً</p>
-        </div>
-      `;
+      itemsDiv.appendChild(itemElement);
     }
   });
 }
@@ -210,8 +169,7 @@ function submitOrder() {
           name: items[key].name,
           price: items[key].price,
           qty: qty,
-          note: note,
-          type: items[key].type // إضافة نوع الصنف للطلب
+          note: note
         });
       }
     }
@@ -304,4 +262,17 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
   // إضافة حدث لزر الإدخال اليدوي
-  document.getElementById('tableNumber').addEventListener('keypress', (e)
+  document.getElementById('tableNumber').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      enterTableManually();
+    }
+  });
+});
+
+// تصدير الدوال للوصول إليها من HTML
+window.enterTableManually = enterTableManually;
+window.goBack = goBack;
+window.newOrder = newOrder;
+window.incrementQuantity = incrementQuantity;
+window.decrementQuantity = decrementQuantity;
+window.submitOrder = submitOrder;
