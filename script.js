@@ -8,21 +8,34 @@ const db = firebase.database();
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
+let isFlashOn = false;
+let currentCameraId = null;
+let backCameraId = null;
+let frontCameraId = null;
 
 // تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// تهيئة ماسح الباركود
-function initializeScanner() {
+// تهيئة الماسح مع الكاميرا الخلفية
+async function initializeScanner() {
   if (isScannerActive) return;
   
   try {
+    // الحصول على قائمة الكاميرات
+    const devices = await Html5Qrcode.getCameras();
+    if (devices && devices.length > 0) {
+      // تحديد الكاميرا الخلفية (عادةً تكون الكاميرا الثانية في القائمة)
+      backCameraId = devices.length > 1 ? devices[1].id : devices[0].id;
+      frontCameraId = devices[0].id;
+      currentCameraId = backCameraId;
+    }
+
     scanner = new Html5QrcodeScanner("scanner", {
       fps: 10,
       qrbox: 250,
       aspectRatio: 1.0,
       disableFlip: false
-    });
+    }, false);
 
     const successCallback = (tableNumber) => {
       isScannerActive = false;
@@ -40,11 +53,87 @@ function initializeScanner() {
       document.querySelector('.fallback-input').style.display = 'block';
     };
 
-    scanner.render(successCallback, errorCallback);
+    // بدء الماسح بالكاميرا الخلفية
+    scanner.start(currentCameraId, {
+      facingMode: "environment"
+    }, successCallback, errorCallback);
+    
     isScannerActive = true;
+    
+    // إعداد أحداث الأزرار
+    setupScannerControls();
   } catch (error) {
     console.error("Scanner initialization error:", error);
     document.querySelector('.fallback-input').style.display = 'block';
+  }
+}
+
+// إعداد عناصر التحكم في الماسح
+function setupScannerControls() {
+  const flashToggle = document.getElementById('flash-toggle');
+  const switchCamera = document.getElementById('switch-camera');
+  
+  if (flashToggle) {
+    flashToggle.addEventListener('click', toggleFlash);
+  }
+  
+  if (switchCamera) {
+    switchCamera.addEventListener('click', switchCameraFn);
+  }
+}
+
+// تبديل الفلاش
+async function toggleFlash() {
+  if (!scanner || !isScannerActive) return;
+  
+  try {
+    isFlashOn = !isFlashOn;
+    const flashBtn = document.getElementById('flash-toggle');
+    
+    if (isFlashOn) {
+      await scanner.applyVideoConstraints({
+        advanced: [{torch: true}]
+      });
+      flashBtn.classList.add('active');
+      flashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
+    } else {
+      await scanner.applyVideoConstraints({
+        advanced: [{torch: false}]
+      });
+      flashBtn.classList.remove('active');
+      flashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
+    }
+  } catch (error) {
+    console.error("Failed to toggle flash:", error);
+    alert("هذه الميزة غير متوفرة في جهازك");
+  }
+}
+
+// تبديل الكاميرا
+async function switchCameraFn() {
+  if (!scanner || !isScannerActive || !backCameraId || !frontCameraId) return;
+  
+  try {
+    await scanner.stop();
+    isScannerActive = false;
+    
+    currentCameraId = currentCameraId === backCameraId ? frontCameraId : backCameraId;
+    
+    const result = await scanner.start(currentCameraId, {
+      facingMode: currentCameraId === backCameraId ? "environment" : "user"
+    }, successCallback, errorCallback);
+    
+    isScannerActive = true;
+    
+    // إعادة تعيين الفلاش عند تبديل الكاميرا
+    if (isFlashOn) {
+      isFlashOn = false;
+      const flashBtn = document.getElementById('flash-toggle');
+      flashBtn.classList.remove('active');
+    }
+  } catch (error) {
+    console.error("Failed to switch camera:", error);
+    initializeScanner(); // إعادة المحاولة
   }
 }
 
