@@ -12,6 +12,7 @@ let html5QrCode = null;
 let isScannerActive = false;
 let isFlashOn = false;
 let currentCameraId = null;
+const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
 
 // عناصر واجهة المستخدم
 const tableInputSection = document.getElementById('table-input');
@@ -35,6 +36,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
 async function initializeScanner() {
   if (isScannerActive) return;
   
+  // تنظيف الماسح السابق إذا كان موجوداً
   if (html5QrCode && html5QrCode.isScanning) {
     await html5QrCode.stop().catch(console.error);
   }
@@ -42,8 +44,10 @@ async function initializeScanner() {
   html5QrCode = new Html5Qrcode("scanner");
   
   const config = {
-    fps: 10,
+    fps: 30,
     qrbox: { width: 250, height: 250 },
+    rememberLastUsedCamera: true,
+    supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
     formatsToSupport: [
       Html5QrcodeSupportedFormats.UPC_A,
       Html5QrcodeSupportedFormats.UPC_E,
@@ -63,26 +67,14 @@ async function initializeScanner() {
   try {
     const devices = await Html5Qrcode.getCameras();
     if (devices && devices.length) {
-      let cameraId;
+      // البحث عن الكاميرا الخلفية فقط
+      const backCamera = findBackCamera(devices);
       
-      // محاولة العثور على الكاميرا الخلفية أولاً
-      const backCamera = await findBackCamera(devices);
-      
-      if (backCamera) {
-        cameraId = backCamera.id;
-      } else if (devices.length === 1) {
-        // إذا كان هناك كاميرا واحدة فقط
-        cameraId = devices[0].id;
-      } else {
-        // عرض خيارات اختيار الكاميرا يدوياً
-        cameraId = await showCameraSelection(devices);
-        if (!cameraId) {
-          switchToManualMode();
-          return;
-        }
+      if (!backCamera) {
+        throw new Error("No back camera found");
       }
-
-      currentCameraId = cameraId;
+      
+      currentCameraId = backCamera.id;
       
       await html5QrCode.start(
         currentCameraId,
@@ -92,106 +84,44 @@ async function initializeScanner() {
       );
       
       isScannerActive = true;
-      setupFlashButton();
+      
+      // التحقق من دعم الفلاش
+      checkFlashSupport();
     } else {
       throw new Error("No cameras found");
     }
   } catch (error) {
     console.error("Scanner initialization error:", error);
     handleScanError(error);
-    switchToManualMode();
+    alert("تعذر الوصول إلى الكاميرا الخلفية. يرجى استخدام الإدخال اليدوي.");
+    document.getElementById('manual-mode-btn').click();
   }
 }
 
-// البحث عن الكاميرا الخلفية
-async function findBackCamera(devices) {
-  const backKeywords = ['back', 'rear', '1', 'primary', 'main', 'bck', 'rear-facing'];
-  const frontKeywords = ['front', 'selfie', '0', '2', 'facing'];
+// البحث عن الكاميرا الخلفية فقط
+function findBackCamera(devices) {
+  const backKeywords = ['back', 'rear', '1', 'primary'];
+  const frontKeywords = ['front', 'selfie', '0', '2'];
   
-  const backCameras = devices.filter(device => {
-    const label = device.label.toLowerCase();
-    const isBack = backKeywords.some(keyword => label.includes(keyword));
-    const isNotFront = !frontKeywords.some(keyword => label.includes(keyword));
-    return isBack && isNotFront;
-  });
-
-  return backCameras.length > 0 ? backCameras[0] : null;
+  // البحث عن كاميرا تحتوي على كلمات دالة على أنها خلفية
+  const backCameras = devices.filter(device => 
+    backKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
+  );
+  
+  // استبعاد الكاميرات الأمامية تماماً
+  const nonFrontCameras = backCameras.filter(device => 
+    !frontKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
+  );
+  
+  return nonFrontCameras.length > 0 ? nonFrontCameras[0] : null;
 }
 
-// عرض واجهة اختيار الكاميرا
-async function showCameraSelection(devices) {
-  return new Promise((resolve) => {
-    const modal = document.createElement('div');
-    modal.style.position = 'fixed';
-    modal.style.top = '0';
-    modal.style.left = '0';
-    modal.style.width = '100%';
-    modal.style.height = '100%';
-    modal.style.backgroundColor = 'rgba(0,0,0,0.9)';
-    modal.style.zIndex = '1000';
-    modal.style.display = 'flex';
-    modal.style.flexDirection = 'column';
-    modal.style.justifyContent = 'center';
-    modal.style.alignItems = 'center';
-    modal.style.color = 'white';
-    
-    modal.innerHTML = `
-      <h2 style="margin-bottom: 30px; font-size: 1.5rem;">اختر الكاميرا المراد استخدامها</h2>
-      <div id="camera-options" style="width: 80%; max-width: 400px; margin-bottom: 30px;"></div>
-      <button id="cancel-camera-selection" style="padding: 12px 24px; background: #f44336; color: white; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer;">
-        إلغاء والاستخدام اليدوي
-      </button>
-    `;
-    
-    const cameraOptions = modal.querySelector('#camera-options');
-    
-    devices.forEach(device => {
-      const btn = document.createElement('button');
-      btn.style.padding = '12px';
-      btn.style.margin = '8px 0';
-      btn.style.width = '100%';
-      btn.style.background = '#4CAF50';
-      btn.style.color = 'white';
-      btn.style.border = 'none';
-      btn.style.borderRadius = '8px';
-      btn.style.fontSize = '1rem';
-      btn.style.cursor = 'pointer';
-      btn.style.display = 'flex';
-      btn.style.alignItems = 'center';
-      btn.style.justifyContent = 'center';
-      
-      const icon = document.createElement('i');
-      icon.className = 'fas fa-camera';
-      icon.style.marginLeft = '8px';
-      
-      btn.appendChild(document.createTextNode(device.label || `كاميرا ${device.id}`));
-      btn.appendChild(icon);
-      
-      btn.onclick = () => {
-        document.body.removeChild(modal);
-        resolve(device.id);
-      };
-      
-      cameraOptions.appendChild(btn);
-    });
-    
-    const cancelBtn = modal.querySelector('#cancel-camera-selection');
-    cancelBtn.onclick = () => {
-      document.body.removeChild(modal);
-      resolve(null);
-    };
-    
-    document.body.appendChild(modal);
-  });
-}
-
-// إعداد زر الفلاش
-async function setupFlashButton() {
+// التحقق من دعم الفلاش
+async function checkFlashSupport() {
   try {
     const capabilities = await html5QrCode.getRunningTrackCapabilities();
     if (capabilities.torch) {
       flashToggle.style.display = 'flex';
-      flashToggle.innerHTML = '<i class="fas fa-lightbulb"></i>';
     } else {
       flashToggle.style.display = 'none';
     }
@@ -213,9 +143,10 @@ async function toggleFlash() {
     });
     
     flashToggle.classList.toggle('active', isFlashOn);
+    flashToggle.innerHTML = `<i class="fas fa-lightbulb"></i>`;
   } catch (error) {
     console.error("Error toggling flash:", error);
-    isFlashOn = !isFlashOn;
+    isFlashOn = !isFlashOn; // التراجع عن التغيير
   }
 }
 
@@ -233,21 +164,23 @@ async function handleScanSuccess(decodedText) {
 function handleScanError(error) {
   console.error("Scan error:", error);
   isScannerActive = false;
-  switchToManualMode();
-}
-
-// التحويل للوضع اليدوي
-function switchToManualMode() {
-  scannerSection.style.display = 'none';
-  manualInputSection.style.display = 'block';
-  manualModeBtn.classList.add('active');
-  scanModeBtn.classList.remove('active');
+  
+  // إظهار خيار الإدخال اليدوي
+  document.querySelector('.fallback-input').style.display = 'block';
+  
+  // إعادة المحاولة بعد 30 ثانية
+  setTimeout(() => {
+    if (scannerSection.style.display !== 'none') {
+      initializeScanner();
+    }
+  }, SCANNER_RETRY_DELAY);
 }
 
 // معالجة رقم الطاولة الممسوحة
 function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
+  // التحقق من صحة رقم الطاولة
   if (!tableNumber || isNaN(tableNumber)) {
     alert("الرجاء مسح باركود صالح");
     html5QrCode.resume().catch(console.error);
@@ -488,16 +421,12 @@ document.addEventListener('DOMContentLoaded', () => {
   manualModeBtn?.addEventListener('click', () => {
     scannerSection.style.display = 'none';
     manualInputSection.style.display = 'block';
-    manualModeBtn.classList.add('active');
-    scanModeBtn.classList.remove('active');
     resetScanner();
   });
   
   scanModeBtn?.addEventListener('click', () => {
     scannerSection.style.display = 'block';
     manualInputSection.style.display = 'none';
-    scanModeBtn.classList.add('active');
-    manualModeBtn.classList.remove('active');
     initializeScanner();
   });
   
