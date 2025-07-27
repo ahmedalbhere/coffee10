@@ -2,72 +2,59 @@ const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
-// تهيئة Firebase
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// متغيرات التطبيق
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
-let currentFlashState = false;
 const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
 
-// تهيئة الصفحة عند التحميل
+// تهيئة السنة في التذييل
+document.getElementById('year').textContent = new Date().getFullYear();
+
+// إعداد الموقع عند التحميل
 document.addEventListener('DOMContentLoaded', () => {
-  // تعيين السنة الحالية في التذييل
-  document.getElementById('year').textContent = new Date().getFullYear();
-  
-  // تهيئة الماسح الضوئي
   initializeScanner();
   
   // إعداد مستمعات الأحداث
-  setupEventListeners();
-});
-
-// إعداد مستمعات الأحداث
-function setupEventListeners() {
-  // أحداث محول نمط الإدخال
-  document.getElementById('manual-mode-btn')?.addEventListener('click', () => {
-    switchToManualInput();
+  document.getElementById('manual-mode-btn').addEventListener('click', () => {
+    document.getElementById('scanner-section').style.display = 'none';
+    document.getElementById('manual-input-section').style.display = 'block';
+    resetScanner();
   });
   
-  document.getElementById('scan-mode-btn')?.addEventListener('click', () => {
-    switchToScannerInput();
+  document.getElementById('scan-mode-btn').addEventListener('click', () => {
+    document.getElementById('scanner-section').style.display = 'block';
+    document.getElementById('manual-input-section').style.display = 'none';
+    initializeScanner();
   });
   
-  // حدث لإدخال رقم الطاولة يدوياً عند الضغط على Enter
-  document.getElementById('tableNumber')?.addEventListener('keypress', (e) => {
+  document.getElementById('tableNumber').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       enterTableManually();
     }
   });
-  
-  // حدث لتبديل وضع الفلاش
-  document.getElementById('flash-toggle')?.addEventListener('click', toggleFlash);
-}
+});
 
-// تهيئة الماسح الضوئي
+// إدارة الماسح الضوئي
 function initializeScanner() {
-  if (isScannerActive || !Html5QrcodeScanner) return;
-  
+  if (isScannerActive) return;
   isScannerActive = true;
 
-  // تنظيف الماسح السابق إذا كان موجوداً
   if (scanner) {
-    scanner.clear().catch(handleScannerError);
+    scanner.clear().catch(console.error);
   }
 
   try {
     scanner = new Html5QrcodeScanner(
       "scanner",
       {
-        fps: 30,
+        fps: 10,
         qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
-        disableFlip: false,
-        rememberLastUsedCamera: true,
-        showTorchButtonIfSupported: true
+        disableFlip: false
       },
       false
     );
@@ -81,24 +68,21 @@ function initializeScanner() {
       }
     );
   } catch (error) {
-    console.error("فشل تهيئة الماسح الضوئي:", error);
+    console.error("Scanner initialization failed:", error);
     handleScanError(error);
   }
 }
 
-// التعامل مع مسح الباركود بنجاح
 function handleScanSuccess(decodedText) {
   scanner.pause().then(() => {
     handleTableScanned(decodedText);
-  }).catch(handleScannerError);
+  }).catch(console.error);
 }
 
-// التعامل مع أخطاء الماسح الضوئي
 function handleScanError(error) {
-  console.error("خطأ في المسح الضوئي:", error);
+  console.error("Scan error:", error);
   isScannerActive = false;
   
-  // إعادة المحاولة بعد فترة
   setTimeout(() => {
     if (document.getElementById('scanner-section').style.display !== 'none') {
       initializeScanner();
@@ -106,112 +90,35 @@ function handleScanError(error) {
   }, SCANNER_RETRY_DELAY);
 }
 
-// تبديل وضع الفلاش
-function toggleFlash() {
-  if (!scanner || !scanner.getState || scanner.getState() !== Html5QrcodeScannerState.SCANNING) return;
-  
-  currentFlashState = !currentFlashState;
-  const flashBtn = document.getElementById('flash-toggle');
-  
-  scanner.toggleFlash().then(() => {
-    flashBtn.classList.toggle('active', currentFlashState);
-  }).catch(err => {
-    console.error("خطأ في تبديل الفلاش:", err);
-    flashBtn.classList.remove('active');
-    currentFlashState = false;
-  });
-}
-
-// التحويل إلى وضع الإدخال اليدوي
-function switchToManualInput() {
-  document.getElementById('scanner-section').style.display = 'none';
-  document.getElementById('manual-input-section').style.display = 'block';
-  resetScanner();
-  document.getElementById('tableNumber').focus();
-}
-
-// التحويل إلى وضع الماسح الضوئي
-function switchToScannerInput() {
-  document.getElementById('scanner-section').style.display = 'block';
-  document.getElementById('manual-input-section').style.display = 'none';
-  initializeScanner();
-}
-
-// إعادة تعيين الماسح الضوئي
-function resetScanner() {
-  if (scanner) {
-    scanner.clear().then(() => {
-      scanner = null;
-      isScannerActive = false;
-      currentFlashState = false;
-      document.getElementById('flash-toggle').classList.remove('active');
-    }).catch(handleScannerError);
-  }
-}
-
-// التعامل مع مسح رقم الطاولة
+// إدارة الطاولات
 function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
-  // التحقق من صحة رقم الطاولة
-  if (!tableNumber || isNaN(tableNumber) {
+  if (!tableNumber || isNaN(tableNumber)) {
     alert("الرجاء مسح باركود صالح");
-    scanner.resume().catch(handleScannerError);
+    scanner.resume().catch(console.error);
     return;
   }
 
-  const tableNum = parseInt(tableNumber);
-  if (tableNum < 1 || tableNum > 100) {
-    alert("رقم الطاولة يجب أن يكون بين 1 و 100");
-    scanner.resume().catch(handleScannerError);
-    return;
-  }
-
-  currentTable = tableNum;
+  currentTable = tableNumber;
   showMenuSection();
   loadMenu();
 }
 
-// إدخال رقم الطاولة يدوياً
-function enterTableManually() {
-  const tableNumber = document.getElementById('tableNumber').value.trim();
-  
-  if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء إدخال رقم طاولة صحيح بين 1 و 100");
-    return;
-  }
-
-  const tableNum = parseInt(tableNumber);
-  if (tableNum < 1 || tableNum > 100) {
-    alert("رقم الطاولة يجب أن يكون بين 1 و 100");
-    return;
-  }
-
-  handleTableScanned(tableNumber);
-  document.getElementById('tableNumber').value = '';
-}
-
-// عرض قسم القائمة
 function showMenuSection() {
   document.getElementById('table-input').style.display = 'none';
   document.getElementById('menu').style.display = 'block';
   document.getElementById('scanned-table-number').textContent = currentTable;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// تحميل قائمة الطعام من Firebase
+// إدارة القائمة
 function loadMenu() {
   db.ref("menu").on("value", (snapshot) => {
     const items = snapshot.val();
     const itemsDiv = document.getElementById('menu-items');
     
     if (!items || Object.keys(items).length === 0) {
-      itemsDiv.innerHTML = `
-        <div class="empty-menu">
-          <i class="fas fa-utensils"></i>
-          <p>لا توجد أصناف متاحة حالياً</p>
-        </div>
-      `;
+      itemsDiv.innerHTML = '<div class="empty-menu"><i class="fas fa-utensils"></i><p>لا توجد أصناف متاحة</p></div>';
       return;
     }
     
@@ -220,7 +127,6 @@ function loadMenu() {
   });
 }
 
-// عرض أصناف القائمة
 function renderMenuItems(items, container) {
   const fragment = document.createDocumentFragment();
   
@@ -231,19 +137,19 @@ function renderMenuItems(items, container) {
     itemElement.innerHTML = `
       <div class="item-info">
         <h3>${item.name}</h3>
-        <div class="item-price">${parseFloat(item.price).toFixed(2)} جنيه</div>
+        <div class="item-price">${item.price} جنيه</div>
       </div>
       <div class="item-controls">
         <div class="quantity-selector">
-          <button class="qty-btn minus-btn" aria-label="تقليل الكمية">
+          <button class="qty-btn minus-btn">
             <i class="fas fa-minus"></i>
           </button>
           <span class="qty-value">0</span>
-          <button class="qty-btn plus-btn" aria-label="زيادة الكمية">
+          <button class="qty-btn plus-btn">
             <i class="fas fa-plus"></i>
           </button>
         </div>
-        <textarea class="item-note" placeholder="أضف ملاحظاتك هنا..."></textarea>
+        <textarea class="item-note" placeholder="ملاحظات"></textarea>
       </div>
     `;
     fragment.appendChild(itemElement);
@@ -253,7 +159,6 @@ function renderMenuItems(items, container) {
   container.appendChild(fragment);
 }
 
-// إعداد عناصر التحكم في الكمية
 function setupQuantityControls() {
   document.getElementById('menu-items').addEventListener('click', (e) => {
     const qtyElement = e.target.closest('.quantity-selector')?.querySelector('.qty-value');
@@ -269,7 +174,7 @@ function setupQuantityControls() {
   });
 }
 
-// إرسال الطلب
+// إدارة الطلبات
 function submitOrder() {
   if (!currentTable) {
     alert("الرجاء تحديد رقم الطاولة أولاً");
@@ -279,14 +184,13 @@ function submitOrder() {
   const orderItems = collectOrderItems();
   
   if (orderItems.length === 0) {
-    alert("الرجاء إضافة أصناف إلى الطلب");
+    alert("الرجاء إضافة عناصر للطلب");
     return;
   }
 
   submitOrderToFirebase(orderItems);
 }
 
-// جمع أصناف الطلب
 function collectOrderItems() {
   const items = [];
   
@@ -305,7 +209,6 @@ function collectOrderItems() {
   return items;
 }
 
-// إرسال الطلب إلى Firebase
 function submitOrderToFirebase(items) {
   const order = { 
     table: currentTable, 
@@ -314,23 +217,13 @@ function submitOrderToFirebase(items) {
     timestamp: firebase.database.ServerValue.TIMESTAMP
   };
   
-  // عرض تحميل أثناء الإرسال
-  const submitBtn = document.querySelector('.btn-large');
-  const originalText = submitBtn.innerHTML;
-  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري إرسال الطلب...';
-  submitBtn.disabled = true;
-  
   db.ref("orders").push(order)
     .then(() => {
       showOrderSummary(order);
     })
     .catch(error => {
-      console.error("خطأ في إرسال الطلب:", error);
-      alert("حدث خطأ أثناء إرسال الطلب، الرجاء المحاولة مرة أخرى");
-    })
-    .finally(() => {
-      submitBtn.innerHTML = originalText;
-      submitBtn.disabled = false;
+      console.error("Order submission error:", error);
+      alert("حدث خطأ أثناء إرسال الطلب");
     });
 }
 
@@ -344,7 +237,6 @@ function showOrderSummary(order) {
   renderOrderDetails(order);
 }
 
-// عرض تفاصيل الطلب
 function renderOrderDetails(order) {
   document.getElementById('summary-table').textContent = order.table;
   
@@ -357,7 +249,7 @@ function renderOrderDetails(order) {
     html += `
       <div class="summary-item">
         ${item.qty} × ${item.name} - ${itemTotal.toFixed(2)} جنيه
-        ${item.note ? `<div class="summary-note">ملاحظة: ${item.note}</div>` : ''}
+        ${item.note ? `<div class="summary-note">${item.note}</div>` : ''}
       </div>
     `;
   });
@@ -366,41 +258,53 @@ function renderOrderDetails(order) {
   document.getElementById('summary-items').innerHTML = html;
 }
 
-// العودة إلى المسح الضوئي
+// التنقل بين الصفحات
 function goBack() {
   resetScanner();
   resetMenu();
 }
 
-// بدء طلب جديد
 function newOrder() {
   document.getElementById('order-summary').style.display = 'none';
   resetScanner();
   showScannerSection();
 }
 
-// إعادة تعيين القائمة
 function resetMenu() {
   document.getElementById('menu').style.display = 'none';
   showScannerSection();
   currentTable = null;
 }
 
-// عرض قسم الماسح الضوئي
 function showScannerSection() {
   document.getElementById('table-input').style.display = 'block';
   initializeScanner();
 }
 
+function resetScanner() {
+  if (scanner) {
+    scanner.clear().then(() => {
+      scanner = null;
+      isScannerActive = false;
+    }).catch(console.error);
+  }
+}
+
+// الدوال العامة
+function enterTableManually() {
+  const tableNumber = document.getElementById('tableNumber').value.trim();
+  
+  if (!tableNumber || isNaN(tableNumber)) {
+    alert("الرجاء إدخال رقم طاولة صحيح");
+    return;
+  }
+  
+  handleTableScanned(tableNumber);
+  document.getElementById('tableNumber').value = '';
+}
+
 // تصدير الدوال للوصول إليها من HTML
 window.enterTableManually = enterTableManually;
-window.setInputMode = function(mode) {
-  if (mode === 'scan') {
-    switchToScannerInput();
-  } else {
-    switchToManualInput();
-  }
-};
 window.submitOrder = submitOrder;
 window.goBack = goBack;
 window.newOrder = newOrder;
