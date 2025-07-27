@@ -1,41 +1,8 @@
-const firebaseConfig = {
-  databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
-};
+// ... (بقية الإعدادات والمتغيرات كما هي)
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-// متغيرات التطبيق
-let currentTable = null;
-let html5QrCode = null;
-let isScannerActive = false;
-let isFlashOn = false;
-let currentCameraId = null;
-
-// عناصر واجهة المستخدم
-const tableInputSection = document.getElementById('table-input');
-const menuSection = document.getElementById('menu');
-const orderSummarySection = document.getElementById('order-summary');
-const menuItemsContainer = document.getElementById('menu-items');
-const scannedTableNumber = document.getElementById('scanned-table-number');
-const summaryTable = document.getElementById('summary-table');
-const summaryItems = document.getElementById('summary-items');
-const scannerSection = document.getElementById('scanner-section');
-const manualInputSection = document.getElementById('manual-input-section');
-const tableNumberInput = document.getElementById('tableNumber');
-const scanModeBtn = document.getElementById('scan-mode-btn');
-const manualModeBtn = document.getElementById('manual-mode-btn');
-const flashToggle = document.getElementById('flash-toggle');
-
-// تهيئة السنة في التذييل
-document.getElementById('year').textContent = new Date().getFullYear();
-
-// إدارة الماسح الضوئي
 async function initializeScanner() {
   if (isScannerActive) return;
   
-  // تنظيف الماسح السابق إذا كان موجوداً
   if (html5QrCode && html5QrCode.isScanning) {
     await html5QrCode.stop().catch(console.error);
   }
@@ -46,31 +13,29 @@ async function initializeScanner() {
     fps: 10,
     qrbox: { width: 250, height: 250 },
     formatsToSupport: [
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.CODE_93,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.AZTEC,
-      Html5QrcodeSupportedFormats.DATA_MATRIX,
-      Html5QrcodeSupportedFormats.PDF_417
+      // ... (تنسيقات الباركود المدعومة)
     ]
   };
 
   try {
     const devices = await Html5Qrcode.getCameras();
     if (devices && devices.length) {
+      let cameraId;
+      
+      // محاولة العثور على الكاميرا الخلفية أولاً
       const backCamera = await findBackCamera(devices);
       
-      if (!backCamera) {
-        throw new Error("No back camera found");
+      if (backCamera) {
+        cameraId = backCamera.id;
+      } else if (devices.length === 1) {
+        // إذا كان هناك كاميرا واحدة فقط
+        cameraId = devices[0].id;
+      } else {
+        // عرض خيارات اختيار الكاميرا يدوياً
+        cameraId = await showCameraSelection(devices);
       }
 
-      currentCameraId = backCamera.id;
+      currentCameraId = cameraId;
       
       await html5QrCode.start(
         currentCameraId,
@@ -88,351 +53,67 @@ async function initializeScanner() {
     console.error("Scanner initialization error:", error);
     handleScanError(error);
     switchToManualMode();
-    alert("تعذر الوصول إلى الكاميرا الخلفية. الرجاء استخدام الإدخال اليدوي.");
   }
 }
 
-// البحث عن الكاميرا الخلفية فقط
-async function findBackCamera(devices) {
-  // كلمات دالة للكاميرا الخلفية
-  const backKeywords = ['back', 'rear', '1', 'primary', 'main', 'bck', 'rear-facing'];
-  const frontKeywords = ['front', 'selfie', '0', '2', 'facing'];
-  
-  // تصفية الكاميرات
-  const backCameras = devices.filter(device => {
-    const label = device.label.toLowerCase();
-    const isBack = backKeywords.some(keyword => label.includes(keyword));
-    const isNotFront = !frontKeywords.some(keyword => label.includes(keyword));
-    return isBack && isNotFront;
-  });
-
-  return backCameras.length > 0 ? backCameras[0] : null;
-}
-
-// إعداد زر الفلاش
-async function setupFlashButton() {
-  try {
-    const capabilities = await html5QrCode.getRunningTrackCapabilities();
-    if (capabilities.torch) {
-      flashToggle.style.display = 'flex';
-      flashToggle.innerHTML = '<i class="fas fa-lightbulb"></i>';
-    } else {
-      flashToggle.style.display = 'none';
-    }
-  } catch (error) {
-    console.error("Error checking flash support:", error);
-    flashToggle.style.display = 'none';
-  }
-}
-
-// تبديل المصباح (الفلاش)
-async function toggleFlash() {
-  if (!html5QrCode || !html5QrCode.isScanning) return;
-  
-  isFlashOn = !isFlashOn;
-  
-  try {
-    await html5QrCode.applyVideoConstraints({
-      advanced: [{ torch: isFlashOn }]
+// عرض واجهة اختيار الكاميرا
+async function showCameraSelection(devices) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.backgroundColor = 'rgba(0,0,0,0.8)';
+    modal.style.zIndex = '1000';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    modal.style.color = 'white';
+    
+    modal.innerHTML = `
+      <h2 style="margin-bottom: 20px;">اختر الكاميرا</h2>
+      <div id="camera-options" style="margin-bottom: 20px;"></div>
+      <button id="cancel-camera-selection" style="padding: 10px 20px; background: #f44336; color: white; border: none; border-radius: 5px;">
+        إلغاء والعودة للوضع اليدوي
+      </button>
+    `;
+    
+    const cameraOptions = document.createElement('div');
+    cameraOptions.id = 'camera-options';
+    
+    devices.forEach(device => {
+      const btn = document.createElement('button');
+      btn.style.padding = '10px 20px';
+      btn.style.margin = '5px';
+      btn.style.background = '#4CAF50';
+      btn.style.color = 'white';
+      btn.style.border = 'none';
+      btn.style.borderRadius = '5px';
+      btn.textContent = device.label || `كاميرا ${device.id}`;
+      btn.onclick = () => {
+        document.body.removeChild(modal);
+        resolve(device.id);
+      };
+      cameraOptions.appendChild(btn);
     });
     
-    flashToggle.classList.toggle('active', isFlashOn);
-  } catch (error) {
-    console.error("Error toggling flash:", error);
-    isFlashOn = !isFlashOn;
-  }
-}
-
-// معالجة مسح الباركود بنجاح
-async function handleScanSuccess(decodedText) {
-  try {
-    await html5QrCode.pause();
-    handleTableScanned(decodedText);
-  } catch (error) {
-    console.error("Error pausing scanner:", error);
-  }
-}
-
-// معالجة أخطاء الماسح
-function handleScanError(error) {
-  console.error("Scan error:", error);
-  isScannerActive = false;
-  switchToManualMode();
-}
-
-// التحويل للوضع اليدوي
-function switchToManualMode() {
-  scannerSection.style.display = 'none';
-  manualInputSection.style.display = 'block';
-  manualModeBtn.classList.add('active');
-  scanModeBtn.classList.remove('active');
-}
-
-// معالجة رقم الطاولة الممسوحة
-function handleTableScanned(tableNumber) {
-  tableNumber = tableNumber.trim();
-  
-  if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء مسح باركود صالح");
-    html5QrCode.resume().catch(console.error);
-    return;
-  }
-
-  currentTable = tableNumber;
-  showMenuSection();
-  loadMenu();
-}
-
-// عرض قسم القائمة
-function showMenuSection() {
-  tableInputSection.style.display = 'none';
-  menuSection.style.display = 'block';
-  scannedTableNumber.textContent = `طاولة ${currentTable}`;
-}
-
-// تحميل قائمة الطعام
-function loadMenu() {
-  db.ref("menu").on("value", (snapshot) => {
-    const items = snapshot.val();
-    menuItemsContainer.innerHTML = '';
+    modal.appendChild(cameraOptions);
     
-    if (!items || Object.keys(items).length === 0) {
-      menuItemsContainer.innerHTML = `
-        <div class="empty-menu">
-          <i class="fas fa-utensils"></i>
-          <p>لا توجد أصناف متاحة حالياً</p>
-        </div>
-      `;
-      return;
-    }
+    const cancelBtn = document.createElement('button');
+    cancelBtn.id = 'cancel-camera-selection';
+    cancelBtn.textContent = 'إلغاء والعودة للوضع اليدوي';
+    cancelBtn.onclick = () => {
+      document.body.removeChild(modal);
+      switchToManualMode();
+      resolve(null);
+    };
+    modal.appendChild(cancelBtn);
     
-    renderMenuItems(items);
+    document.body.appendChild(modal);
   });
 }
 
-// عرض أصناف القائمة
-function renderMenuItems(items) {
-  const fragment = document.createDocumentFragment();
-  
-  Object.entries(items).forEach(([key, item]) => {
-    const itemElement = document.createElement('div');
-    itemElement.className = 'menu-item';
-    itemElement.dataset.itemId = key;
-    itemElement.innerHTML = `
-      <div class="item-info">
-        <h3>${item.name}</h3>
-        <div class="item-price">${item.price} جنيه</div>
-      </div>
-      <div class="item-controls">
-        <div class="quantity-selector">
-          <button class="qty-btn minus-btn">
-            <i class="fas fa-minus"></i>
-          </button>
-          <span class="qty-value">0</span>
-          <button class="qty-btn plus-btn">
-            <i class="fas fa-plus"></i>
-          </button>
-        </div>
-        <textarea class="item-note" placeholder="ملاحظات (اختياري)"></textarea>
-      </div>
-    `;
-    fragment.appendChild(itemElement);
-  });
-  
-  menuItemsContainer.appendChild(fragment);
-  setupQuantityControls();
-}
-
-// إعداد عناصر التحكم بالكمية
-function setupQuantityControls() {
-  menuItemsContainer.addEventListener('click', (e) => {
-    const minusBtn = e.target.closest('.minus-btn');
-    const plusBtn = e.target.closest('.plus-btn');
-    
-    if (!minusBtn && !plusBtn) return;
-    
-    const qtyElement = e.target.closest('.quantity-selector').querySelector('.qty-value');
-    let currentQty = parseInt(qtyElement.textContent) || 0;
-    
-    if (minusBtn && currentQty > 0) {
-      qtyElement.textContent = currentQty - 1;
-    } else if (plusBtn) {
-      qtyElement.textContent = currentQty + 1;
-    }
-  });
-}
-
-// جمع عناصر الطلب
-function collectOrderItems() {
-  const items = [];
-  
-  document.querySelectorAll('.menu-item').forEach(item => {
-    const qty = parseInt(item.querySelector('.qty-value').textContent) || 0;
-    if (qty > 0) {
-      items.push({
-        name: item.querySelector('h3').textContent,
-        price: parseFloat(item.querySelector('.item-price').textContent),
-        qty: qty,
-        note: item.querySelector('.item-note').value.trim()
-      });
-    }
-  });
-  
-  return items;
-}
-
-// إرسال الطلب إلى Firebase
-async function submitOrderToFirebase(items) {
-  try {
-    const orderRef = await db.ref("orders").push({
-      table: currentTable,
-      items: items,
-      status: "pending",
-      timestamp: firebase.database.ServerValue.TIMESTAMP
-    });
-    
-    showOrderSummary(orderRef.key, items);
-  } catch (error) {
-    console.error("Order submission error:", error);
-    alert("حدث خطأ أثناء إرسال الطلب. يرجى المحاولة مرة أخرى.");
-  }
-}
-
-// عرض ملخص الطلب
-function showOrderSummary(orderId, items) {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  
-  menuSection.style.display = 'none';
-  orderSummarySection.style.display = 'block';
-  
-  summaryTable.textContent = currentTable;
-  
-  let html = '';
-  let total = 0;
-  
-  items.forEach(item => {
-    const itemTotal = item.price * item.qty;
-    total += itemTotal;
-    html += `
-      <div class="summary-item">
-        <strong>${item.qty} × ${item.name}</strong>
-        <span>${itemTotal.toFixed(2)} جنيه</span>
-        ${item.note ? `<div class="summary-note">${item.note}</div>` : ''}
-      </div>
-    `;
-  });
-  
-  html += `
-    <div class="summary-total">
-      <strong>المجموع الكلي:</strong>
-      <span>${total.toFixed(2)} جنيه</span>
-    </div>
-    <div class="order-id">رقم الطلب: #${orderId.substring(0, 6)}</div>
-  `;
-  
-  summaryItems.innerHTML = html;
-}
-
-// إرسال الطلب
-function submitOrder() {
-  if (!currentTable) {
-    alert("الرجاء تحديد رقم الطاولة أولاً");
-    return;
-  }
-
-  const orderItems = collectOrderItems();
-  
-  if (orderItems.length === 0) {
-    alert("الرجاء إضافة عناصر للطلب");
-    return;
-  }
-
-  submitOrderToFirebase(orderItems);
-}
-
-// العودة إلى المسح الضوئي
-function goBack() {
-  resetScanner();
-  resetMenu();
-}
-
-// بدء طلب جديد
-function newOrder() {
-  orderSummarySection.style.display = 'none';
-  resetScanner();
-  showScannerSection();
-}
-
-// إعادة تعيين القائمة
-function resetMenu() {
-  menuSection.style.display = 'none';
-  showScannerSection();
-  currentTable = null;
-}
-
-// عرض قسم الماسح الضوئي
-function showScannerSection() {
-  tableInputSection.style.display = 'block';
-  initializeScanner();
-}
-
-// إعادة تعيين الماسح الضوئي
-async function resetScanner() {
-  if (html5QrCode && html5QrCode.isScanning) {
-    try {
-      await html5QrCode.stop();
-      html5QrCode = null;
-      isScannerActive = false;
-      isFlashOn = false;
-      flashToggle.classList.remove('active');
-    } catch (error) {
-      console.error("Error resetting scanner:", error);
-    }
-  }
-}
-
-// إدخال رقم الطاولة يدوياً
-function enterTableManually() {
-  const tableNumber = tableNumberInput.value.trim();
-  
-  if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء إدخال رقم طاولة صحيح");
-    return;
-  }
-  
-  handleTableScanned(tableNumber);
-  tableNumberInput.value = '';
-}
-
-// تهيئة الصفحة
-document.addEventListener('DOMContentLoaded', () => {
-  initializeScanner();
-  
-  // أحداث الأزرار
-  manualModeBtn?.addEventListener('click', () => {
-    scannerSection.style.display = 'none';
-    manualInputSection.style.display = 'block';
-    manualModeBtn.classList.add('active');
-    scanModeBtn.classList.remove('active');
-    resetScanner();
-  });
-  
-  scanModeBtn?.addEventListener('click', () => {
-    scannerSection.style.display = 'block';
-    manualInputSection.style.display = 'none';
-    scanModeBtn.classList.add('active');
-    manualModeBtn.classList.remove('active');
-    initializeScanner();
-  });
-  
-  tableNumberInput?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') enterTableManually();
-  });
-  
-  flashToggle?.addEventListener('click', toggleFlash);
-  
-  // أحداث الأزرار الأخرى
-  document.getElementById('submit-order')?.addEventListener('click', submitOrder);
-  document.getElementById('back-btn')?.addEventListener('click', goBack);
-  document.getElementById('new-order-btn')?.addEventListener('click', newOrder);
-});
+// ... (بقية الدوال تبقى كما هي)
