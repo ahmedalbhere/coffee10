@@ -34,26 +34,6 @@ const flashToggle = document.getElementById('flash-toggle');
 // تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// إطفاء الفلاش
-async function turnOffFlash() {
-  if (!currentStream || !isFlashOn) return;
-  
-  try {
-    const tracks = currentStream.getVideoTracks();
-    if (tracks.length === 0) return;
-    
-    const track = tracks[0];
-    await track.applyConstraints({
-      advanced: [{ torch: false }]
-    });
-    
-    isFlashOn = false;
-    flashToggle.classList.remove('active');
-  } catch (error) {
-    console.error("Error turning off flash:", error);
-  }
-}
-
 // إدارة الماسح الضوئي
 async function initializeScanner() {
   if (isScannerActive) return;
@@ -245,13 +225,13 @@ async function handleScanSuccess(decodedText) {
       return; // تجاهل الكود تماماً
     }
     
-    // إطفاء الفلاش أولاً - هذا هو الجزء المهم
-    await turnOffFlash();
-    
-    // ثم إيقاف الماسح مؤقتاً
     await html5QrCode.pause();
     
-    // معالجة رقم الطاولة
+    // إيقاف الفلاش إذا كان نشطاً
+    if (isFlashOn) {
+      await toggleFlash();
+    }
+    
     handleTableScanned(decodedText);
   } catch (error) {
     console.error("Error pausing scanner:", error);
@@ -487,13 +467,12 @@ function showScannerSection() {
 async function resetScanner() {
   if (html5QrCode && html5QrCode.isScanning) {
     try {
-      // إطفاء الفلاش قبل الإيقاف
-      await turnOffFlash();
-      
       await html5QrCode.stop();
       html5QrCode = null;
       isScannerActive = false;
+      isFlashOn = false;
       currentStream = null;
+      flashToggle.classList.remove('active');
     } catch (error) {
       console.error("Error resetting scanner:", error);
     }
