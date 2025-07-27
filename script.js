@@ -9,100 +9,92 @@ const db = firebase.database();
 let currentTable = null;
 let scanner = null;
 let isScannerActive = false;
-const SCANNER_RETRY_DELAY = 3000; // 3 ثواني لإعادة المحاولة
+let scannerRetryTimer = null;
+const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
 
 // تهيئة السنة في التذييل
 document.getElementById('year').textContent = new Date().getFullYear();
 
-// إدارة الماسح الضوئي (معدّل للباركود فقط)
+// إدارة الماسح الضوئي
 function initializeScanner() {
   if (isScannerActive) return;
   isScannerActive = true;
 
   // تنظيف الماسح السابق إذا كان موجوداً
   if (scanner) {
-    scanner.clear().catch(error => {
-      console.error("Error clearing scanner:", error);
-    });
+    scanner.clear().catch(console.error);
+  }
+
+  // إلغاء أي مؤقت سابق
+  if (scannerRetryTimer) {
+    clearTimeout(scannerRetryTimer);
+    scannerRetryTimer = null;
   }
 
   try {
-    // إنشاء مثيل جديد للماسح مع تحديد صيغ الباركود فقط
     scanner = new Html5QrcodeScanner(
       "scanner",
       {
-        fps: 10,
-        qrbox: { width: 250, height: 100 },
+        fps: 30,
+        qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
-        disableFlip: true,
+        disableFlip: false,
         rememberLastUsedCamera: true,
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.CODE_39
-        ]
+        showTorchButtonIfSupported: true
       },
       false
     );
 
-    // عرض الماسح
     scanner.render(
-      decodedText => {
+      (decodedText) => {
         handleScanSuccess(decodedText);
       },
-      error => {
+      (error) => {
         handleScanError(error);
       }
-    ).catch(error => {
-      console.error("Error rendering scanner:", error);
-      handleScanError(error);
-    });
-
+    );
   } catch (error) {
-    console.error("فشل تهيئة الماسح:", error);
+    console.error("Scanner initialization failed:", error);
     handleScanError(error);
   }
 }
 
-// معالجة المسح الناجح
 function handleScanSuccess(decodedText) {
-  console.log("تم مسح الباركود:", decodedText);
-  
-  if (!/^\d+$/.test(decodedText)) {
-    alert("الرجاء مسح باركود صالح (أرقام فقط)");
-    try {
-      if (scanner) scanner.resume();
-    } catch (error) {
-      console.error("Error resuming scanner:", error);
-    }
-    return;
-  }
-
-  if (scanner) {
-    scanner.pause().then(() => {
-      handleTableScanned(decodedText);
-    }).catch(error => {
-      console.error("Error pausing scanner:", error);
-      handleTableScanned(decodedText);
-    });
-  } else {
+  scanner.pause().then(() => {
     handleTableScanned(decodedText);
-  }
+    // تنظيف الماسح بعد النجاح
+    cleanUpScanner();
+  }).catch(console.error);
 }
 
 function handleScanError(error) {
-  console.error("خطأ في المسح:", error);
-  document.getElementById('scanner-section').style.display = 'none';
-  document.getElementById('manual-input-section').style.display = 'block';
+  console.error("Scan error:", error);
   isScannerActive = false;
   
-  setTimeout(() => {
-    if (document.getElementById('scanner-section').style.display !== 'none') {
-      initializeScanner();
-    }
-  }, SCANNER_RETRY_DELAY);
+  // إعادة المحاولة بعد 30 ثانية فقط إذا كان الماسح معروضاً
+  if (document.getElementById('scanner-section').style.display !== 'none') {
+    scannerRetryTimer = setTimeout(() => {
+      if (document.getElementById('scanner-section').style.display !== 'none') {
+        initializeScanner();
+      }
+    }, SCANNER_RETRY_DELAY);
+  }
+}
+
+// تنظيف الماسح الضوئي
+function cleanUpScanner() {
+  if (scanner) {
+    scanner.clear().then(() => {
+      scanner = null;
+      isScannerActive = false;
+      
+      // إلغاء أي مؤقت لإعادة المحاولة
+      if (scannerRetryTimer) {
+        clearTimeout(scannerRetryTimer);
+        scannerRetryTimer = null;
+      }
+    }).catch(console.error);
+  }
 }
 
 // إدارة الطاولات
@@ -110,11 +102,10 @@ function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
   if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء مسح باركود صالح (أرقام فقط)");
-    try {
-      if (scanner) scanner.resume();
-    } catch (error) {
-      console.error("Error resuming scanner:", error);
+    alert("الرجاء مسح باركود صالح");
+    // إعادة تشغيل الماسح إذا فشلت القراءة
+    if (scanner) {
+      scanner.resume().catch(console.error);
     }
     return;
   }
@@ -136,7 +127,7 @@ function loadMenu() {
     const items = snapshot.val();
     const itemsDiv = document.getElementById('menu-items');
     
-    if (!items) {
+    if (!items || Object.keys(items).length === 0) {
       itemsDiv.innerHTML = '<div class="empty-menu"><i class="fas fa-utensils"></i><p>لا توجد أصناف متاحة</p></div>';
       return;
     }
@@ -279,13 +270,13 @@ function renderOrderDetails(order) {
 
 // التنقل بين الصفحات
 function goBack() {
-  resetScanner();
+  cleanUpScanner();
   resetMenu();
 }
 
 function newOrder() {
   document.getElementById('order-summary').style.display = 'none';
-  resetScanner();
+  cleanUpScanner();
   showScannerSection();
 }
 
@@ -300,23 +291,15 @@ function showScannerSection() {
   initializeScanner();
 }
 
-function resetScanner() {
-  if (scanner) {
-    scanner.clear().then(() => {
-      scanner = null;
-      isScannerActive = false;
-    }).catch(console.error);
-  }
-}
-
 // تهيئة الصفحة
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
+  // إضافة مستمع للأحداث للوضع اليدوي
   document.getElementById('manual-mode-btn')?.addEventListener('click', () => {
     document.getElementById('scanner-section').style.display = 'none';
     document.getElementById('manual-input-section').style.display = 'block';
-    resetScanner();
+    cleanUpScanner();
   });
   
   document.getElementById('scan-mode-btn')?.addEventListener('click', () => {
@@ -345,12 +328,30 @@ function enterTableManually() {
   document.getElementById('tableNumber').value = '';
 }
 
+// تبديل الفلاش
+function toggleFlash() {
+  if (!scanner) return;
+  
+  scanner.getRunningTrackCapabilities().then(capabilities => {
+    if (capabilities.torch) {
+      scanner.applyVideoConstraints({
+        advanced: [{torch: !capabilities.torch.active}]
+      }).then(() => {
+        const flashBtn = document.getElementById('flash-toggle');
+        if (capabilities.torch.active) {
+          flashBtn.classList.remove('active');
+        } else {
+          flashBtn.classList.add('active');
+        }
+      });
+    }
+  }).catch(console.error);
+}
+
 // تصدير الدوال للوصول إليها من HTML
-window.initializeScanner = initializeScanner;
-window.handleScanSuccess = handleScanSuccess;
-window.handleScanError = handleScanError;
-window.handleTableScanned = handleTableScanned;
 window.enterTableManually = enterTableManually;
+window.setInputMode = setInputMode;
 window.goBack = goBack;
 window.newOrder = newOrder;
 window.submitOrder = submitOrder;
+window.toggleFlash = toggleFlash;
