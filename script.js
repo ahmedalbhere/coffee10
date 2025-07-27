@@ -12,7 +12,6 @@ let html5QrCode = null;
 let isScannerActive = false;
 let isFlashOn = false;
 let currentCameraId = null;
-const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
 
 // عناصر واجهة المستخدم
 const tableInputSection = document.getElementById('table-input');
@@ -44,10 +43,8 @@ async function initializeScanner() {
   html5QrCode = new Html5Qrcode("scanner");
   
   const config = {
-    fps: 30,
+    fps: 10,
     qrbox: { width: 250, height: 250 },
-    rememberLastUsedCamera: true,
-    supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
     formatsToSupport: [
       Html5QrcodeSupportedFormats.UPC_A,
       Html5QrcodeSupportedFormats.UPC_E,
@@ -67,13 +64,12 @@ async function initializeScanner() {
   try {
     const devices = await Html5Qrcode.getCameras();
     if (devices && devices.length) {
-      // البحث عن الكاميرا الخلفية فقط
-      const backCamera = findBackCamera(devices);
+      const backCamera = await findBackCamera(devices);
       
       if (!backCamera) {
         throw new Error("No back camera found");
       }
-      
+
       currentCameraId = backCamera.id;
       
       await html5QrCode.start(
@@ -84,44 +80,42 @@ async function initializeScanner() {
       );
       
       isScannerActive = true;
-      
-      // التحقق من دعم الفلاش
-      checkFlashSupport();
+      setupFlashButton();
     } else {
       throw new Error("No cameras found");
     }
   } catch (error) {
     console.error("Scanner initialization error:", error);
     handleScanError(error);
-    alert("تعذر الوصول إلى الكاميرا الخلفية. يرجى استخدام الإدخال اليدوي.");
-    document.getElementById('manual-mode-btn').click();
+    switchToManualMode();
+    alert("تعذر الوصول إلى الكاميرا الخلفية. الرجاء استخدام الإدخال اليدوي.");
   }
 }
 
 // البحث عن الكاميرا الخلفية فقط
-function findBackCamera(devices) {
-  const backKeywords = ['back', 'rear', '1', 'primary'];
-  const frontKeywords = ['front', 'selfie', '0', '2'];
+async function findBackCamera(devices) {
+  // كلمات دالة للكاميرا الخلفية
+  const backKeywords = ['back', 'rear', '1', 'primary', 'main', 'bck', 'rear-facing'];
+  const frontKeywords = ['front', 'selfie', '0', '2', 'facing'];
   
-  // البحث عن كاميرا تحتوي على كلمات دالة على أنها خلفية
-  const backCameras = devices.filter(device => 
-    backKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
-  );
-  
-  // استبعاد الكاميرات الأمامية تماماً
-  const nonFrontCameras = backCameras.filter(device => 
-    !frontKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
-  );
-  
-  return nonFrontCameras.length > 0 ? nonFrontCameras[0] : null;
+  // تصفية الكاميرات
+  const backCameras = devices.filter(device => {
+    const label = device.label.toLowerCase();
+    const isBack = backKeywords.some(keyword => label.includes(keyword));
+    const isNotFront = !frontKeywords.some(keyword => label.includes(keyword));
+    return isBack && isNotFront;
+  });
+
+  return backCameras.length > 0 ? backCameras[0] : null;
 }
 
-// التحقق من دعم الفلاش
-async function checkFlashSupport() {
+// إعداد زر الفلاش
+async function setupFlashButton() {
   try {
     const capabilities = await html5QrCode.getRunningTrackCapabilities();
     if (capabilities.torch) {
       flashToggle.style.display = 'flex';
+      flashToggle.innerHTML = '<i class="fas fa-lightbulb"></i>';
     } else {
       flashToggle.style.display = 'none';
     }
@@ -143,10 +137,9 @@ async function toggleFlash() {
     });
     
     flashToggle.classList.toggle('active', isFlashOn);
-    flashToggle.innerHTML = `<i class="fas fa-lightbulb"></i>`;
   } catch (error) {
     console.error("Error toggling flash:", error);
-    isFlashOn = !isFlashOn; // التراجع عن التغيير
+    isFlashOn = !isFlashOn;
   }
 }
 
@@ -164,23 +157,21 @@ async function handleScanSuccess(decodedText) {
 function handleScanError(error) {
   console.error("Scan error:", error);
   isScannerActive = false;
-  
-  // إظهار خيار الإدخال اليدوي
-  document.querySelector('.fallback-input').style.display = 'block';
-  
-  // إعادة المحاولة بعد 30 ثانية
-  setTimeout(() => {
-    if (scannerSection.style.display !== 'none') {
-      initializeScanner();
-    }
-  }, SCANNER_RETRY_DELAY);
+  switchToManualMode();
+}
+
+// التحويل للوضع اليدوي
+function switchToManualMode() {
+  scannerSection.style.display = 'none';
+  manualInputSection.style.display = 'block';
+  manualModeBtn.classList.add('active');
+  scanModeBtn.classList.remove('active');
 }
 
 // معالجة رقم الطاولة الممسوحة
 function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
-  // التحقق من صحة رقم الطاولة
   if (!tableNumber || isNaN(tableNumber)) {
     alert("الرجاء مسح باركود صالح");
     html5QrCode.resume().catch(console.error);
@@ -421,12 +412,16 @@ document.addEventListener('DOMContentLoaded', () => {
   manualModeBtn?.addEventListener('click', () => {
     scannerSection.style.display = 'none';
     manualInputSection.style.display = 'block';
+    manualModeBtn.classList.add('active');
+    scanModeBtn.classList.remove('active');
     resetScanner();
   });
   
   scanModeBtn?.addEventListener('click', () => {
     scannerSection.style.display = 'block';
     manualInputSection.style.display = 'none';
+    scanModeBtn.classList.add('active');
+    manualModeBtn.classList.remove('active');
     initializeScanner();
   });
   
