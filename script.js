@@ -2,7 +2,7 @@ const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
-// تهيئة Firebase
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
@@ -67,9 +67,14 @@ async function initializeScanner() {
   try {
     const devices = await Html5Qrcode.getCameras();
     if (devices && devices.length) {
-      // البحث عن الكاميرا الخلفية
+      // البحث عن الكاميرا الخلفية فقط
       const backCamera = findBackCamera(devices);
-      currentCameraId = backCamera ? backCamera.id : devices[0].id;
+      
+      if (!backCamera) {
+        throw new Error("No back camera found");
+      }
+      
+      currentCameraId = backCamera.id;
       
       await html5QrCode.start(
         currentCameraId,
@@ -88,27 +93,27 @@ async function initializeScanner() {
   } catch (error) {
     console.error("Scanner initialization error:", error);
     handleScanError(error);
+    alert("تعذر الوصول إلى الكاميرا الخلفية. يرجى استخدام الإدخال اليدوي.");
+    document.getElementById('manual-mode-btn').click();
   }
 }
 
-// البحث عن الكاميرا الخلفية
+// البحث عن الكاميرا الخلفية فقط
 function findBackCamera(devices) {
   const backKeywords = ['back', 'rear', '1', 'primary'];
-  const frontKeywords = ['front', 'selfie', '0'];
+  const frontKeywords = ['front', 'selfie', '0', '2'];
   
-  // البحث أولاً عن كاميرا تحتوي على كلمات دالة على أنها خلفية
-  let backCamera = devices.find(device => 
+  // البحث عن كاميرا تحتوي على كلمات دالة على أنها خلفية
+  const backCameras = devices.filter(device => 
     backKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
   );
   
-  // إذا لم نجد، نبحث عن كاميرا لا تحتوي على كلمات دالة على أنها أمامية
-  if (!backCamera) {
-    backCamera = devices.find(device => 
-      !frontKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
-    );
-  }
+  // استبعاد الكاميرات الأمامية تماماً
+  const nonFrontCameras = backCameras.filter(device => 
+    !frontKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
+  );
   
-  return backCamera;
+  return nonFrontCameras.length > 0 ? nonFrontCameras[0] : null;
 }
 
 // التحقق من دعم الفلاش
