@@ -245,7 +245,7 @@ async function handleScanSuccess(decodedText) {
       return; // تجاهل الكود تماماً
     }
     
-    // إطفاء الفلاش أولاً
+    // إطفاء الفلاش أولاً - هذا هو الجزء المهم
     await turnOffFlash();
     
     // ثم إيقاف الماسح مؤقتاً
