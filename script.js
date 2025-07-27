@@ -12,9 +12,11 @@ let html5QrCode = null;
 let isScannerActive = false;
 let isFlashOn = false;
 let currentCameraId = null;
-let currentStream = null; // تخزين دفق الفيديو للتحكم في الفلاش
-const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
-const VALID_TABLE_NUMBER_REGEX = /^\d{1,3}$/; // يسمح فقط بأرقام الطاولات من 1-3 أرقام
+let currentStream = null;
+let flashTimer = null; // مؤقت الفلاش
+const SCANNER_RETRY_DELAY = 30000; // 30 ثانية
+const FLASH_TIMEOUT = 10000; // 10 ثواني
+const VALID_TABLE_NUMBER_REGEX = /^\d{1,3}$/;
 
 // عناصر واجهة المستخدم
 const tableInputSection = document.getElementById('table-input');
@@ -38,7 +40,6 @@ document.getElementById('year').textContent = new Date().getFullYear();
 async function initializeScanner() {
   if (isScannerActive) return;
   
-  // تنظيف الماسح السابق إذا كان موجوداً
   if (html5QrCode && html5QrCode.isScanning) {
     await html5QrCode.stop().catch(console.error);
   }
@@ -67,7 +68,6 @@ async function initializeScanner() {
   };
 
   try {
-    // المحاولة الأولى: استخدام facingMode للكاميرا الخلفية مباشرة
     await html5QrCode.start(
       { facingMode: "environment" },
       config,
@@ -77,12 +77,10 @@ async function initializeScanner() {
     
     isScannerActive = true;
     
-    // الحصول على دفق الفيديو للتحكم في الفلاش
     setTimeout(() => {
       const videoElement = document.querySelector('#scanner video');
       if (videoElement) {
         currentStream = videoElement.srcObject;
-        // التحقق من دعم الفلاش بعد ثانية من بدء التشغيل
         checkFlashSupport();
       }
     }, 1000);
@@ -90,7 +88,6 @@ async function initializeScanner() {
   } catch (firstError) {
     console.log("فشل بدء التشغيل بـ facingMode، جارٍ المحاولة بقائمة الأجهزة...", firstError);
     
-    // المحاولة الثانية: البحث اليدوي عن الكاميرا الخلفية
     try {
       const devices = await Html5Qrcode.getCameras();
       if (devices && devices.length) {
@@ -106,12 +103,10 @@ async function initializeScanner() {
         
         isScannerActive = true;
         
-        // الحصول على دفق الفيديو للتحكم في الفلاش
         setTimeout(() => {
           const videoElement = document.querySelector('#scanner video');
           if (videoElement) {
             currentStream = videoElement.srcObject;
-            // التحقق من دعم الفلاش بعد ثانية من بدء التشغيل
             checkFlashSupport();
           }
         }, 1000);
@@ -126,27 +121,22 @@ async function initializeScanner() {
   }
 }
 
-// البحث عن الكاميرا الخلفية بشكل دقيق
 function findBackCamera(devices) {
-  // كلمات دالة شاملة للكاميرا الخلفية
   const backKeywords = ['back', 'rear', 'environment', 'external', '1', 'primary', 'bck', 'main', 'cam1'];
   const frontKeywords = ['front', 'selfie', 'user', 'face', '0', 'secondary', 'internal'];
   
-  // البحث عن كاميرا محددة بخاصية facingMode
   const environmentCamera = devices.find(device => 
     device.label.toLowerCase().includes('environment')
   );
   
   if (environmentCamera) return environmentCamera;
   
-  // البحث عن كاميرا تحتوي على كلمات خلفية
   const explicitBackCamera = devices.find(device => 
     backKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
   );
   
   if (explicitBackCamera) return explicitBackCamera;
   
-  // البحث عن كاميرا بدون كلمات أمامية
   const nonFrontCamera = devices.find(device => 
     !frontKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
   );
@@ -154,7 +144,6 @@ function findBackCamera(devices) {
   return nonFrontCamera || devices[0];
 }
 
-// التحقق من دعم الفلاش
 function checkFlashSupport() {
   if (!currentStream) return;
   
@@ -178,7 +167,6 @@ function checkFlashSupport() {
   }
 }
 
-// تبديل المصباح (الفلاش)
 async function toggleFlash() {
   if (!currentStream) return;
   
@@ -197,10 +185,25 @@ async function toggleFlash() {
     flashToggle.classList.toggle('active', isFlashOn);
     flashToggle.innerHTML = `<i class="fas fa-bolt"></i>`;
     
+    // إدارة مؤقت الفلاش
+    if (isFlashOn) {
+      // بدء المؤقت لـ 10 ثواني
+      flashTimer = setTimeout(async () => {
+        if (isFlashOn) {
+          await toggleFlash();
+        }
+      }, FLASH_TIMEOUT);
+    } else {
+      // إلغاء المؤقت عند إيقاف الفلاش
+      if (flashTimer) {
+        clearTimeout(flashTimer);
+        flashTimer = null;
+      }
+    }
+    
   } catch (error) {
     console.error("Error toggling flash:", error);
     
-    // المحاولة بطريقة بديلة
     try {
       const track = currentStream.getVideoTracks()[0];
       await track.applyConstraints({
@@ -216,18 +219,15 @@ async function toggleFlash() {
   }
 }
 
-// معالجة مسح الباركود بنجاح
 async function handleScanSuccess(decodedText) {
   try {
-    // تجاهل أي كود QR غير صالح لرقم الطاولة
     if (!VALID_TABLE_NUMBER_REGEX.test(decodedText)) {
       console.log("تم تجاهل كود غير صالح:", decodedText);
-      return; // تجاهل الكود تماماً
+      return;
     }
     
     await html5QrCode.pause();
     
-    // إيقاف الفلاش إذا كان نشطاً
     if (isFlashOn) {
       await toggleFlash();
     }
@@ -238,15 +238,12 @@ async function handleScanSuccess(decodedText) {
   }
 }
 
-// معالجة أخطاء الماسح
 function handleScanError(error) {
   console.error("Scan error:", error);
   isScannerActive = false;
   
-  // إظهار خيار الإدخال اليدوي
   document.querySelector('.fallback-input').style.display = 'block';
   
-  // إعادة المحاولة بعد 30 ثانية
   setTimeout(() => {
     if (scannerSection.style.display !== 'none') {
       initializeScanner();
@@ -254,11 +251,9 @@ function handleScanError(error) {
   }, SCANNER_RETRY_DELAY);
 }
 
-// معالجة رقم الطاولة الممسوحة
 function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
-  // التحقق من صحة رقم الطاولة باستخدام regex
   if (!VALID_TABLE_NUMBER_REGEX.test(tableNumber)) {
     alert("الرجاء مسح باركود صالح لرقم الطاولة");
     html5QrCode.resume().catch(console.error);
@@ -270,14 +265,12 @@ function handleTableScanned(tableNumber) {
   loadMenu();
 }
 
-// عرض قسم القائمة
 function showMenuSection() {
   tableInputSection.style.display = 'none';
   menuSection.style.display = 'block';
   scannedTableNumber.textContent = `طاولة ${currentTable}`;
 }
 
-// تحميل قائمة الطعام
 function loadMenu() {
   db.ref("menu").on("value", (snapshot) => {
     const items = snapshot.val();
@@ -297,7 +290,6 @@ function loadMenu() {
   });
 }
 
-// عرض أصناف القائمة
 function renderMenuItems(items) {
   const fragment = document.createDocumentFragment();
   
@@ -330,7 +322,6 @@ function renderMenuItems(items) {
   setupQuantityControls();
 }
 
-// إعداد عناصر التحكم بالكمية
 function setupQuantityControls() {
   menuItemsContainer.addEventListener('click', (e) => {
     const minusBtn = e.target.closest('.minus-btn');
@@ -349,7 +340,6 @@ function setupQuantityControls() {
   });
 }
 
-// جمع عناصر الطلب
 function collectOrderItems() {
   const items = [];
   
@@ -368,7 +358,6 @@ function collectOrderItems() {
   return items;
 }
 
-// إرسال الطلب إلى Firebase
 async function submitOrderToFirebase(items) {
   try {
     const orderRef = await db.ref("orders").push({
@@ -385,7 +374,6 @@ async function submitOrderToFirebase(items) {
   }
 }
 
-// عرض ملخص الطلب
 function showOrderSummary(orderId, items) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   
@@ -420,7 +408,6 @@ function showOrderSummary(orderId, items) {
   summaryItems.innerHTML = html;
 }
 
-// إرسال الطلب
 function submitOrder() {
   if (!currentTable) {
     alert("الرجاء تحديد رقم الطاولة أولاً");
@@ -437,33 +424,28 @@ function submitOrder() {
   submitOrderToFirebase(orderItems);
 }
 
-// العودة إلى المسح الضوئي
 function goBack() {
   resetScanner();
   resetMenu();
 }
 
-// بدء طلب جديد
 function newOrder() {
   orderSummarySection.style.display = 'none';
   resetScanner();
   showScannerSection();
 }
 
-// إعادة تعيين القائمة
 function resetMenu() {
   menuSection.style.display = 'none';
   showScannerSection();
   currentTable = null;
 }
 
-// عرض قسم الماسح الضوئي
 function showScannerSection() {
   tableInputSection.style.display = 'block';
   initializeScanner();
 }
 
-// إعادة تعيين الماسح الضوئي
 async function resetScanner() {
   if (html5QrCode && html5QrCode.isScanning) {
     try {
@@ -473,13 +455,17 @@ async function resetScanner() {
       isFlashOn = false;
       currentStream = null;
       flashToggle.classList.remove('active');
+      
+      if (flashTimer) {
+        clearTimeout(flashTimer);
+        flashTimer = null;
+      }
     } catch (error) {
       console.error("Error resetting scanner:", error);
     }
   }
 }
 
-// إدخال رقم الطاولة يدوياً
 function enterTableManually() {
   const tableNumber = tableNumberInput.value.trim();
   
@@ -492,11 +478,9 @@ function enterTableManually() {
   tableNumberInput.value = '';
 }
 
-// تهيئة الصفحة
 document.addEventListener('DOMContentLoaded', () => {
   initializeScanner();
   
-  // أحداث الأزرار
   manualModeBtn?.addEventListener('click', () => {
     scannerSection.style.display = 'none';
     manualInputSection.style.display = 'block';
@@ -515,7 +499,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   flashToggle?.addEventListener('click', toggleFlash);
   
-  // أحداث الأزرار الأخرى
   document.getElementById('submit-order')?.addEventListener('click', submitOrder);
   document.getElementById('back-btn')?.addEventListener('click', goBack);
   document.getElementById('new-order-btn')?.addEventListener('click', newOrder);
