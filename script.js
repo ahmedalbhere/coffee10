@@ -67,9 +67,12 @@ async function initializeScanner() {
   try {
     const devices = await Html5Qrcode.getCameras();
     if (devices && devices.length) {
-      // البحث عن الكاميرا الخلفية
-      const backCamera = findBackCamera(devices);
-      currentCameraId = backCamera ? backCamera.id : devices[0].id;
+      // تحديد الكاميرا الخلفية مباشرةً
+      currentCameraId = devices.find(device => 
+        device.label.toLowerCase().includes('back') || 
+        device.label.toLowerCase().includes('rear') || 
+        device.label.toLowerCase().includes('1')
+      )?.id || devices[0].id;
       
       await html5QrCode.start(
         currentCameraId,
@@ -89,26 +92,6 @@ async function initializeScanner() {
     console.error("Scanner initialization error:", error);
     handleScanError(error);
   }
-}
-
-// البحث عن الكاميرا الخلفية
-function findBackCamera(devices) {
-  const backKeywords = ['back', 'rear', '1', 'primary'];
-  const frontKeywords = ['front', 'selfie', '0'];
-  
-  // البحث أولاً عن كاميرا تحتوي على كلمات دالة على أنها خلفية
-  let backCamera = devices.find(device => 
-    backKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
-  );
-  
-  // إذا لم نجد، نبحث عن كاميرا لا تحتوي على كلمات دالة على أنها أمامية
-  if (!backCamera) {
-    backCamera = devices.find(device => 
-      !frontKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
-    );
-  }
-  
-  return backCamera;
 }
 
 // التحقق من دعم الفلاش
