@@ -67,43 +67,7 @@ async function initializeScanner() {
   try {
     const devices = await Html5Qrcode.getCameras();
     if (devices && devices.length) {
-      // البحث عن الكاميرا الخلفية فقط (Back Camera)
-      const backCamera = devices.find(device => {
-        const label = device.label.toLowerCase();
-        return (
-          label.includes('back') || 
-          label.includes('rear') || 
-          label.includes('1') ||
-          label.includes('primary')
-        );
-      });
-      
-      if (backCamera) {
-        currentCameraId = backCamera.id;
-        
-        await html5QrCode.start(
-          currentCameraId,
-          config,
-          handleScanSuccess,
-          handleScanError
-        );
-        
-        isScannerActive = true;
-        checkFlashSupport();
-      } else {
-        // لا توجد كاميرا خلفية متاحة
-        alert("⚠️ الكاميرا الخلفية غير متاحة. الرجاء استخدام كاميرا خلفية أو الإدخال اليدوي.");
-        document.querySelector('.fallback-input').style.display = 'block';
-        isScannerActive = false;
-      }
-    } else {
-      throw new Error("No cameras found");
-    }
-  } catch (error) {
-    console.error("خطأ في تشغيل الماسح:", error);
-    handleScanError(error);
-  }
-}
+    
 
 // التحقق من دعم الفلاش
 async function checkFlashSupport() {
@@ -119,7 +83,31 @@ async function checkFlashSupport() {
     flashToggle.style.display = 'none';
   }
 }
-
+ // دالة للعثور على الكاميرا الخلفية
+    const getBackCamera = async () => {
+      const devices = await Html5Qrcode.getCameras();
+      for (const device of devices) {
+        if (device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('rear')) {
+          return device.id;
+        }
+      }
+      // إذا لم نجد كاميرا خلفية، نستخدم آخر كاميرا (عادة تكون الخلفية في الأجهزة التي بها كاميرا واحدة)
+      return devices[devices.length - 1].id;
+    };
+    
+    const cameraId = await getBackCamera();
+    
+    await html5QrCode.start(
+      cameraId,
+      {
+        fps: 10,
+        qrbox: 250,
+        aspectRatio: 1.0,
+        disableFlip: false
+      },
+      (tableNumber) => {
+        // نجاح المس
 // تبديل الفلاش
 async function toggleFlash() {
   if (!html5QrCode || !html5QrCode.isScanning) return;
