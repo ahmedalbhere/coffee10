@@ -12,6 +12,7 @@ let html5QrCode = null;
 let isScannerActive = false;
 let isFlashOn = false;
 let currentCameraId = null;
+let currentStream = null; // تخزين دفق الفيديو للتحكم في الفلاش
 const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
 const VALID_TABLE_NUMBER_REGEX = /^\d{1,3}$/; // يسمح فقط بأرقام الطاولات من 1-3 أرقام
 
@@ -76,8 +77,16 @@ async function initializeScanner() {
     
     isScannerActive = true;
     
-    // التحقق من دعم الفلاش
-    checkFlashSupport();
+    // الحصول على دفق الفيديو للتحكم في الفلاش
+    setTimeout(() => {
+      const videoElement = document.querySelector('#scanner video');
+      if (videoElement) {
+        currentStream = videoElement.srcObject;
+        // التحقق من دعم الفلاش بعد ثانية من بدء التشغيل
+        checkFlashSupport();
+      }
+    }, 1000);
+    
   } catch (firstError) {
     console.log("فشل بدء التشغيل بـ facingMode، جارٍ المحاولة بقائمة الأجهزة...", firstError);
     
@@ -96,7 +105,17 @@ async function initializeScanner() {
         );
         
         isScannerActive = true;
-        checkFlashSupport();
+        
+        // الحصول على دفق الفيديو للتحكم في الفلاش
+        setTimeout(() => {
+          const videoElement = document.querySelector('#scanner video');
+          if (videoElement) {
+            currentStream = videoElement.srcObject;
+            // التحقق من دعم الفلاش بعد ثانية من بدء التشغيل
+            checkFlashSupport();
+          }
+        }, 1000);
+        
       } else {
         throw new Error("No cameras found");
       }
@@ -136,16 +155,22 @@ function findBackCamera(devices) {
 }
 
 // التحقق من دعم الفلاش
-async function checkFlashSupport() {
-  if (!html5QrCode || !html5QrCode.isScanning) return;
+function checkFlashSupport() {
+  if (!currentStream) return;
   
   try {
-    const capabilities = await html5QrCode.getRunningTrackCapabilities();
-    if (capabilities.torch) {
+    const tracks = currentStream.getVideoTracks();
+    if (tracks.length === 0) return;
+    
+    const track = tracks[0];
+    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+    
+    if ('torch' in capabilities) {
       flashToggle.style.display = 'flex';
-      flashToggle.innerHTML = `<i class="fas fa-bolt"></i>`; // أيقونة الفلاش الصحيحة
+      flashToggle.innerHTML = `<i class="fas fa-bolt"></i>`;
     } else {
       flashToggle.style.display = 'none';
+      console.log("الكاميرا لا تدعم الفلاش");
     }
   } catch (error) {
     console.error("Error checking flash support:", error);
@@ -155,22 +180,39 @@ async function checkFlashSupport() {
 
 // تبديل المصباح (الفلاش)
 async function toggleFlash() {
-  if (!html5QrCode || !html5QrCode.isScanning) return;
-  
-  isFlashOn = !isFlashOn;
+  if (!currentStream) return;
   
   try {
-    await html5QrCode.applyVideoConstraints({
-      advanced: [{ torch: isFlashOn }]
-    });
+    const tracks = currentStream.getVideoTracks();
+    if (tracks.length === 0) return;
     
+    const track = tracks[0];
+    const constraints = {
+      advanced: [{ torch: !isFlashOn }]
+    };
+    
+    await track.applyConstraints(constraints);
+    
+    isFlashOn = !isFlashOn;
     flashToggle.classList.toggle('active', isFlashOn);
-    flashToggle.innerHTML = isFlashOn 
-      ? `<i class="fas fa-bolt"></i>` 
-      : `<i class="fas fa-bolt"></i>`;
+    flashToggle.innerHTML = `<i class="fas fa-bolt"></i>`;
+    
   } catch (error) {
     console.error("Error toggling flash:", error);
-    isFlashOn = !isFlashOn; // التراجع عن التغيير
+    
+    // المحاولة بطريقة بديلة
+    try {
+      const track = currentStream.getVideoTracks()[0];
+      await track.applyConstraints({
+        advanced: [{ torch: !isFlashOn }]
+      });
+      
+      isFlashOn = !isFlashOn;
+      flashToggle.classList.toggle('active', isFlashOn);
+    } catch (secondError) {
+      console.error("Failed to toggle flash:", secondError);
+      flashToggle.style.display = 'none';
+    }
   }
 }
 
@@ -423,6 +465,7 @@ async function resetScanner() {
       html5QrCode = null;
       isScannerActive = false;
       isFlashOn = false;
+      currentStream = null;
       flashToggle.classList.remove('active');
     } catch (error) {
       console.error("Error resetting scanner:", error);
