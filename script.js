@@ -1,420 +1,402 @@
+// script.js - نظام طلبات الكافيه
+
+// تهيئة Firebase
 const firebaseConfig = {
   databaseURL: "https://coffee-dda5d-default-rtdb.firebaseio.com/"
 };
 
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// عناصر واجهة المستخدم
+const tableInputSection = document.getElementById('table-input');
+const menuSection = document.getElementById('menu');
+const orderSummarySection = document.getElementById('order-summary');
+const scannerSection = document.getElementById('scanner-section');
+const manualInputSection = document.getElementById('manual-input-section');
+const errorMessage = document.getElementById('input-error');
+const menuItemsContainer = document.getElementById('menu-items');
+const scannedTableNumber = document.getElementById('scanned-table-number');
+const summaryTable = document.getElementById('summary-table');
+const summaryItems = document.getElementById('summary-items');
+const tableNumberInput = document.getElementById('tableNumber');
+const flashToggle = document.getElementById('flash-toggle');
+const scanModeBtn = document.getElementById('scan-mode-btn');
+const manualModeBtn = document.getElementById('manual-mode-btn');
+
+// متغيرات التطبيق
 let currentTable = null;
 let scanner = null;
-let isScannerActive = false;
-let scannerRetryTimer = null;
-const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
+let selectedItems = [];
+let isFlashOn = false;
+let isManualMode = false;
 
-// تهيئة السنة في التذييل
-document.getElementById('year').textContent = new Date().getFullYear();
-
-// ==================== إدارة الماسح الضوئي ====================
-function initializeScanner() {
-  if (isScannerActive) return;
-  isScannerActive = true;
-
-  // تنظيف الماسح السابق إذا كان موجوداً
-  if (scanner) {
-    scanner.clear().catch(error => {
-      console.error("Error clearing previous scanner:", error);
-    });
-  }
-
-  try {
-    scanner = new Html5QrcodeScanner(
-      "scanner",
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
-        disableFlip: false,
-        rememberLastUsedCamera: true,
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-      },
-      false
-    );
-
-    scanner.render(
-      (decodedText) => {
-        handleScanSuccess(decodedText);
-      },
-      (error) => {
-        handleScanError(error);
-      }
-    );
-
-    console.log("تم تهيئة الماسح بنجاح");
-  } catch (error) {
-    console.error("فشل تهيئة الماسح:", error);
-    handleScanError(error);
-  }
-}
-
-function handleScanSuccess(decodedText) {
-  console.log("تم مسح الباركود بنجاح:", decodedText);
-  showLoadingIndicator(true);
+// تهيئة الصفحة
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('year').textContent = new Date().getFullYear();
   
-  if (scanner) {
-    scanner.pause().then(() => {
-      cleanUpScanner();
-      handleTableScanned(decodedText);
-    }).catch(error => {
-      console.error("Error pausing scanner:", error);
-      cleanUpScanner();
-      handleTableScanned(decodedText);
-    });
+  // تعيين وضع الإدخال الافتراضي (الماسح الضوئي)
+  setInputMode('scan');
+  
+  // تحميل قائمة الطعام
+  loadMenuItems();
+});
+
+// تعيين وضع إدخال رقم الطاولة
+function setInputMode(mode) {
+  if (mode === 'scan') {
+    isManualMode = false;
+    scannerSection.style.display = 'block';
+    manualInputSection.style.display = 'none';
+    scanModeBtn.classList.add('active');
+    manualModeBtn.classList.remove('active');
+    initScanner();
   } else {
-    handleTableScanned(decodedText);
+    isManualMode = true;
+    scannerSection.style.display = 'none';
+    manualInputSection.style.display = 'block';
+    scanModeBtn.classList.remove('active');
+    manualModeBtn.classList.add('active');
+    if (scanner) {
+      scanner.clear().catch(error => console.error("Failed to clear scanner:", error));
+    }
+    tableNumberInput.focus();
   }
 }
 
-function handleScanError(error) {
-  console.error("خطأ في الماسح الضوئي:", error);
-  showError("حدث خطأ في الماسح. جاري إعادة المحاولة...");
-  scheduleScannerRetry();
-}
-
-function cleanUpScanner() {
-  if (scanner) {
-    scanner.clear().then(() => {
-      console.log("تم إيقاف الماسح بنجاح");
-      scanner = null;
-      isScannerActive = false;
-      cancelScannerRetry();
-    }).catch(error => {
-      console.error("Error cleaning up scanner:", error);
-      scanner = null;
-      isScannerActive = false;
-    });
+// تهيئة ماسح الباركود
+function initScanner() {
+  if (!scanner && !isManualMode) {
+    scanner = new Html5QrcodeScanner("scanner", {
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+      supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+    }, false);
+    
+    scanner.render(
+      qrCodeSuccessCallback,
+      qrCodeErrorCallback
+    );
   }
 }
 
-function scheduleScannerRetry() {
-  cancelScannerRetry();
-  if (document.getElementById('scanner-section').style.display !== 'none') {
-    scannerRetryTimer = setTimeout(() => {
-      initializeScanner();
-    }, SCANNER_RETRY_DELAY);
-  }
-}
-
-function cancelScannerRetry() {
-  if (scannerRetryTimer) {
-    clearTimeout(scannerRetryTimer);
-    scannerRetryTimer = null;
-  }
-}
-
+// تبديل وضع الفلاش
 function toggleFlash() {
   if (!scanner) return;
   
-  scanner.getRunningTrackCapabilities().then(capabilities => {
-    if (capabilities.torch) {
-      const flashBtn = document.getElementById('flash-toggle');
-      const isActive = flashBtn.classList.contains('active');
-      
-      scanner.applyVideoConstraints({
-        advanced: [{torch: !isActive}]
-      }).then(() => {
-        flashBtn.classList.toggle('active');
-      }).catch(console.error);
-    }
-  }).catch(console.error);
+  isFlashOn = !isFlashOn;
+  flashToggle.classList.toggle('active', isFlashOn);
+  
+  // هذه الميزة تتطلب دعم المتصفح للتحكم في الفلاش
+  // وقد لا تعمل في جميع المتصفحات
+  scanner.applyVideoConstraints({
+    advanced: [{ torch: isFlashOn }]
+  }).then(() => {
+    console.log("Flash toggled:", isFlashOn);
+  }).catch(err => {
+    console.error("Failed to toggle flash:", err);
+    flashToggle.style.display = 'none'; // إخفاء الزر إذا لم يكن مدعوماً
+  });
 }
 
-// ==================== إدارة الطاولات والطلبات ====================
-function handleTableScanned(tableNumber) {
-  tableNumber = tableNumber.trim();
+// رد فعل عند قراءة الباركود بنجاح
+function qrCodeSuccessCallback(decodedText) {
+  if (!decodedText) return;
   
-  if (!tableNumber || isNaN(tableNumber)) {
-    showError("الرجاء مسح باركود صالح");
-    initializeScanner();
+  const tableNumber = parseInt(decodedText);
+  if (!isNaN(tableNumber) {
+    handleTableNumber(tableNumber);
+  } else {
+    showError("باركود غير صالح. الرجاء مسح باركود الطاولة.");
+  }
+}
+
+// رد فعل عند حدوث خطأ في الماسح الضوئي
+function qrCodeErrorCallback(error) {
+  console.error("QR Scanner error:", error);
+  if (error.includes('NotAllowedError')) {
+    showError("تم رفض إذن الكاميرا. الرجاء السماح باستخدام الكاميرا.");
+  }
+}
+
+// إدخال رقم الطاولة يدوياً
+function enterTableManually() {
+  const tableNumber = parseInt(tableNumberInput.value);
+  
+  if (!tableNumber || isNaN(tableNumber) {
+    showError("الرجاء إدخال رقم طاولة صحيح بين 1 و 100");
     return;
   }
-
-  currentTable = tableNumber;
-  showMenuSection();
-  loadMenu();
-}
-
-function showMenuSection() {
-  document.getElementById('table-input').style.display = 'none';
-  document.getElementById('menu').style.display = 'block';
-  document.getElementById('scanned-table-number').textContent = currentTable;
-}
-
-function loadMenu() {
-  showLoadingIndicator(true);
   
-  db.ref("menu").once("value").then((snapshot) => {
+  if (tableNumber < 1 || tableNumber > 100) {
+    showError("رقم الطاولة يجب أن يكون بين 1 و 100");
+    return;
+  }
+  
+  handleTableNumber(tableNumber);
+}
+
+// معالجة رقم الطاولة
+function handleTableNumber(tableNumber) {
+  currentTable = tableNumber;
+  scannedTableNumber.textContent = `الطاولة: ${tableNumber}`;
+  tableInputSection.style.display = 'none';
+  menuSection.style.display = 'block';
+  hideError();
+  
+  // إيقاف الماسح الضوئي إذا كان يعمل
+  if (scanner && !isManualMode) {
+    scanner.clear().catch(error => console.error("Failed to clear scanner:", error));
+  }
+}
+
+// العودة إلى إدخال رقم الطاولة
+function goBack() {
+  currentTable = null;
+  menuSection.style.display = 'none';
+  tableInputSection.style.display = 'block';
+  selectedItems = [];
+  updateOrderButton();
+  
+  // إعادة تشغيل الماسح الضوئي إذا كان في وضع المسح
+  if (!isManualMode) {
+    initScanner();
+  }
+}
+
+// تحميل أصناف القائمة من قاعدة البيانات
+function loadMenuItems() {
+  db.ref("menu").on("value", snapshot => {
+    menuItemsContainer.innerHTML = '';
     const items = snapshot.val();
-    const itemsDiv = document.getElementById('menu-items');
-    itemsDiv.innerHTML = '';
     
-    if (!items || Object.keys(items).length === 0) {
-      itemsDiv.innerHTML = `
+    if (!items) {
+      menuItemsContainer.innerHTML = `
         <div class="empty-menu">
           <i class="fas fa-utensils"></i>
-          <p>لا توجد أصناف متاحة</p>
+          <p>لا توجد أصناف في القائمة حالياً</p>
         </div>
       `;
       return;
     }
     
-    renderMenuItems(items, itemsDiv);
-    showLoadingIndicator(false);
-  }).catch(error => {
-    console.error("Error loading menu:", error);
-    showError("حدث خطأ في تحميل القائمة");
-    showLoadingIndicator(false);
-  });
-}
-
-function renderMenuItems(items, container) {
-  const fragment = document.createDocumentFragment();
-  
-  Object.entries(items).forEach(([key, item]) => {
-    const itemElement = document.createElement('div');
-    itemElement.className = 'menu-item';
-    itemElement.dataset.itemId = key;
-    itemElement.innerHTML = `
-      <div class="item-info">
-        <h3>${item.name}</h3>
-        <div class="item-price">${item.price} جنيه</div>
-      </div>
-      <div class="item-controls">
-        <div class="quantity-selector">
-          <button class="qty-btn minus-btn">
-            <i class="fas fa-minus"></i>
-          </button>
-          <span class="qty-value">0</span>
-          <button class="qty-btn plus-btn">
-            <i class="fas fa-plus"></i>
-          </button>
-        </div>
-        <textarea class="item-note" placeholder="ملاحظات"></textarea>
-      </div>
-    `;
-    fragment.appendChild(itemElement);
-  });
-  
-  container.appendChild(fragment);
-  setupQuantityControls();
-}
-
-function setupQuantityControls() {
-  document.getElementById('menu-items').addEventListener('click', (e) => {
-    const qtyElement = e.target.closest('.quantity-selector')?.querySelector('.qty-value');
-    if (!qtyElement) return;
-    
-    let currentQty = parseInt(qtyElement.textContent) || 0;
-    
-    if (e.target.closest('.minus-btn')) {
-      if (currentQty > 0) qtyElement.textContent = currentQty - 1;
-    } else if (e.target.closest('.plus-btn')) {
-      qtyElement.textContent = currentQty + 1;
+    for (const [key, item] of Object.entries(items)) {
+      const itemElement = createMenuItemElement(key, item);
+      menuItemsContainer.appendChild(itemElement);
     }
   });
 }
 
+// إنشاء عنصر صنف في القائمة
+function createMenuItemElement(key, item) {
+  const itemElement = document.createElement('div');
+  itemElement.className = 'menu-item';
+  
+  const itemObj = {
+    id: key,
+    name: item.name,
+    price: parseFloat(item.price),
+    qty: 0,
+    note: ''
+  };
+  
+  itemElement.innerHTML = `
+    <div class="item-info">
+      <h3>${item.name}</h3>
+      <div class="item-price">${item.price} جنيه</div>
+    </div>
+    <div class="item-controls">
+      <div class="quantity-selector">
+        <button class="qty-btn minus" onclick="updateQuantity('${key}', -1)">
+          <i class="fas fa-minus"></i>
+        </button>
+        <span class="qty-value" id="qty-${key}">0</span>
+        <button class="qty-btn plus" onclick="updateQuantity('${key}', 1)">
+          <i class="fas fa-plus"></i>
+        </button>
+      </div>
+      <textarea class="item-note" id="note-${key}" 
+                placeholder="ملاحظات خاصة (اختياري)"></textarea>
+    </div>
+  `;
+  
+  return itemElement;
+}
+
+// تحديث كمية الصنف
+function updateQuantity(itemId, change) {
+  const qtyElement = document.getElementById(`qty-${itemId}`);
+  let currentQty = parseInt(qtyElement.textContent) || 0;
+  let newQty = currentQty + change;
+  
+  if (newQty < 0) newQty = 0;
+  
+  qtyElement.textContent = newQty;
+  
+  // تحديث selectedItems
+  const existingItemIndex = selectedItems.findIndex(item => item.id === itemId);
+  
+  if (newQty > 0) {
+    const noteElement = document.getElementById(`note-${itemId}`);
+    const note = noteElement ? noteElement.value.trim() : '';
+    
+    const menuItemRef = db.ref(`menu/${itemId}`);
+    menuItemRef.once('value').then(snapshot => {
+      const menuItem = snapshot.val();
+      
+      if (existingItemIndex >= 0) {
+        // تحديث الصنف الموجود
+        selectedItems[existingItemIndex].qty = newQty;
+        selectedItems[existingItemIndex].note = note;
+      } else {
+        // إضافة صنف جديد
+        selectedItems.push({
+          id: itemId,
+          name: menuItem.name,
+          price: parseFloat(menuItem.price),
+          qty: newQty,
+          note: note
+        });
+      }
+      
+      updateOrderButton();
+    });
+  } else if (existingItemIndex >= 0) {
+    // إزالة الصنف إذا كانت الكمية صفر
+    selectedItems.splice(existingItemIndex, 1);
+    updateOrderButton();
+  }
+}
+
+// تحديث حالة زر تأكيد الطلب
+function updateOrderButton() {
+  const orderButton = document.querySelector('.btn-large');
+  if (!orderButton) return;
+  
+  const totalItems = selectedItems.reduce((sum, item) => sum + item.qty, 0);
+  
+  if (totalItems > 0) {
+    orderButton.disabled = false;
+    orderButton.innerHTML = `<i class="fas fa-paper-plane"></i> تأكيد الطلب (${totalItems})`;
+  } else {
+    orderButton.disabled = true;
+    orderButton.innerHTML = `<i class="fas fa-paper-plane"></i> تأكيد الطلب`;
+  }
+}
+
+// إرسال الطلب إلى قاعدة البيانات
 function submitOrder() {
-  if (!currentTable) {
-    showError("الرجاء تحديد رقم الطاولة أولاً");
+  if (!currentTable || selectedItems.length === 0) return;
+  
+  // تصفية الأصناف ذات الكمية أكبر من صفر
+  const itemsToOrder = selectedItems.filter(item => item.qty > 0);
+  
+  if (itemsToOrder.length === 0) {
+    showError("الرجاء إضافة أصناف إلى الطلب");
     return;
   }
-
-  const orderItems = collectOrderItems();
   
-  if (orderItems.length === 0) {
-    showError("الرجاء إضافة عناصر للطلب");
-    return;
-  }
-
-  showLoadingIndicator(true);
-  submitOrderToFirebase(orderItems);
-}
-
-function collectOrderItems() {
-  const items = [];
-  
-  document.querySelectorAll('.menu-item').forEach(item => {
-    const qty = parseInt(item.querySelector('.qty-value').textContent) || 0;
-    if (qty > 0) {
-      items.push({
-        name: item.querySelector('h3').textContent,
-        price: parseFloat(item.querySelector('.item-price').textContent),
-        qty: qty,
-        note: item.querySelector('.item-note').value.trim()
-      });
-    }
-  });
-  
-  return items;
-}
-
-function submitOrderToFirebase(items) {
-  const order = { 
-    table: currentTable, 
-    items: items,
+  const orderData = {
+    table: currentTable,
+    items: itemsToOrder.map(item => ({
+      name: item.name,
+      price: item.price,
+      qty: item.qty,
+      note: item.note
+    })),
     status: "pending",
     timestamp: firebase.database.ServerValue.TIMESTAMP
   };
   
-  db.ref("orders").push(order)
+  // إرسال الطلب إلى Firebase
+  db.ref("orders").push(orderData)
     .then(() => {
-      showOrderSummary(order);
-      showLoadingIndicator(false);
+      showOrderSummary(itemsToOrder);
     })
     .catch(error => {
-      console.error("Order submission error:", error);
-      showError("حدث خطأ أثناء إرسال الطلب");
-      showLoadingIndicator(false);
+      console.error("Error submitting order:", error);
+      showError("حدث خطأ أثناء إرسال الطلب. الرجاء المحاولة مرة أخرى.");
     });
 }
 
-function showOrderSummary(order) {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+// عرض ملخص الطلب
+function showOrderSummary(items) {
+  menuSection.style.display = 'none';
+  orderSummarySection.style.display = 'block';
   
-  document.getElementById('menu').style.display = 'none';
-  document.getElementById('order-summary').style.display = 'block';
+  summaryTable.textContent = currentTable;
   
-  renderOrderDetails(order);
-}
-
-function renderOrderDetails(order) {
-  document.getElementById('summary-table').textContent = order.table;
-  
-  let html = '';
+  let itemsHTML = '';
   let total = 0;
   
-  order.items.forEach(item => {
+  items.forEach(item => {
     const itemTotal = item.price * item.qty;
     total += itemTotal;
-    html += `
+    
+    itemsHTML += `
       <div class="summary-item">
-        ${item.qty} × ${item.name} - ${itemTotal.toFixed(2)} جنيه
+        <div class="item-name">${item.name}</div>
+        <div class="item-details">
+          <span class="item-qty">${item.qty} ×</span>
+          <span class="item-price">${item.price} ج</span>
+          <span class="item-total">${itemTotal.toFixed(2)} ج</span>
+        </div>
         ${item.note ? `<div class="summary-note">${item.note}</div>` : ''}
       </div>
     `;
   });
   
-  html += `<div class="summary-total">المجموع: ${total.toFixed(2)} جنيه</div>`;
-  document.getElementById('summary-items').innerHTML = html;
-}
-
-// ==================== إدارة الواجهة ====================
-function setInputMode(mode) {
-  if (mode === 'scan') {
-    document.getElementById('scanner-section').style.display = 'block';
-    document.getElementById('manual-input-section').style.display = 'none';
-    document.getElementById('scan-mode-btn').classList.add('active');
-    document.getElementById('manual-mode-btn').classList.remove('active');
-    initializeScanner();
-  } else {
-    document.getElementById('scanner-section').style.display = 'none';
-    document.getElementById('manual-input-section').style.display = 'block';
-    document.getElementById('scan-mode-btn').classList.remove('active');
-    document.getElementById('manual-mode-btn').classList.add('active');
-    cleanUpScanner();
-  }
-}
-
-function enterTableManually() {
-  const tableNumber = document.getElementById('tableNumber').value.trim();
+  itemsHTML += `
+    <div class="summary-total">المجموع الكلي: ${total.toFixed(2)} جنيه</div>
+  `;
   
-  if (!tableNumber || isNaN(tableNumber)) {
-    showError("الرجاء إدخال رقم طاولة صحيح");
-    return;
-  }
-  
-  handleTableScanned(tableNumber);
-  document.getElementById('tableNumber').value = '';
+  summaryItems.innerHTML = itemsHTML;
 }
 
-function goBack() {
-  cleanUpScanner();
-  resetMenu();
-}
-
+// بدء طلب جديد
 function newOrder() {
-  document.getElementById('order-summary').style.display = 'none';
-  cleanUpScanner();
-  showScannerSection();
-}
-
-function resetMenu() {
-  document.getElementById('menu').style.display = 'none';
-  showScannerSection();
   currentTable = null;
-}
-
-function showScannerSection() {
-  document.getElementById('table-input').style.display = 'block';
-  initializeScanner();
-}
-
-function showLoadingIndicator(show) {
-  const loader = document.getElementById('loader');
-  if (loader) {
-    loader.style.display = show ? 'block' : 'none';
+  selectedItems = [];
+  orderSummarySection.style.display = 'none';
+  tableInputSection.style.display = 'block';
+  
+  // إعادة تعيين الكميات والملاحظات
+  document.querySelectorAll('.qty-value').forEach(el => {
+    el.textContent = '0';
+  });
+  
+  document.querySelectorAll('.item-note').forEach(el => {
+    el.value = '';
+  });
+  
+  // إعادة تشغيل الماسح الضوئي إذا كان في وضع المسح
+  if (!isManualMode) {
+    initScanner();
   }
 }
 
+// عرض رسالة خطأ
 function showError(message) {
-  const errorElement = document.getElementById('input-error');
-  if (errorElement) {
-    errorElement.textContent = message;
-    errorElement.style.display = 'block';
-    setTimeout(() => {
-      errorElement.style.display = 'none';
-    }, 5000);
-  }
+  errorMessage.textContent = message;
+  errorMessage.style.display = 'block';
+  setTimeout(() => {
+    errorMessage.classList.add('show');
+  }, 10);
 }
 
-// ==================== تهيئة الصفحة ====================
-document.addEventListener('DOMContentLoaded', () => {
-  // إضافة عنصر تحميل إذا لم يكن موجوداً
-  if (!document.getElementById('loader')) {
-    const loader = document.createElement('div');
-    loader.id = 'loader';
-    loader.style.display = 'none';
-    loader.innerHTML = `
-      <div class="loading-spinner">
-        <i class="fas fa-spinner fa-spin"></i>
-        <p>جاري التحميل...</p>
-      </div>
-    `;
-    document.body.appendChild(loader);
-  }
-
-  initializeScanner();
-  
-  document.getElementById('manual-mode-btn')?.addEventListener('click', () => {
-    setInputMode('manual');
-  });
-  
-  document.getElementById('scan-mode-btn')?.addEventListener('click', () => {
-    setInputMode('scan');
-  });
-  
-  document.getElementById('tableNumber')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      enterTableManually();
-    }
-  });
-});
+// إخفاء رسالة الخطأ
+function hideError() {
+  errorMessage.classList.remove('show');
+  setTimeout(() => {
+    errorMessage.style.display = 'none';
+  }, 300);
+}
 
 // تصدير الدوال للوصول إليها من HTML
-window.enterTableManually = enterTableManually;
 window.setInputMode = setInputMode;
-window.goBack = goBack;
-window.newOrder = newOrder;
-window.submitOrder = submitOrder;
 window.toggleFlash = toggleFlash;
+window.enterTableManually = enterTableManually;
+window.goBack = goBack;
+window.updateQuantity = updateQuantity;
+window.submitOrder = submitOrder;
+window.newOrder = newOrder;
