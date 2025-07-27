@@ -6,220 +6,168 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// UI Elements
-const loginSection = document.getElementById('login-section');
-const adminPanel = document.getElementById('admin-panel');
-const ordersContainer = document.getElementById('orders');
-const menuListContainer = document.getElementById('menu-list');
+// Global variables
+let currentTable = null;
+let scanner = null;
+let isScannerActive = false;
 
-// Initialize the page
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('admin-year').textContent = new Date().getFullYear();
-  adminPanel.style.display = 'none';
+// Set current year in footer
+document.getElementById('year').textContent = new Date().getFullYear();
+
+/**
+ * Initialize QR code scanner with back camera
+ */
+async function initializeScanner() {
+  if (isScannerActive) return;
   
-  // Check for previous login
-  if (localStorage.getItem('adminLoggedIn') === 'true') {
-    loginSection.style.display = 'none';
-    adminPanel.style.display = 'block';
-    loadData();
-  }
-});
-
-/**
- * Admin login function
- */
-function login() {
-  const pass = document.getElementById('admin-pass').value;
-  
-  if (pass === "4321") {
-    loginSection.style.display = 'none';
-    adminPanel.style.display = 'block';
-    localStorage.setItem('adminLoggedIn', 'true');
-    loadData();
-  } else {
-    alert("كلمة المرور غير صحيحة");
-    document.getElementById('admin-pass').value = '';
-  }
-}
-
-/**
- * Admin logout function
- */
-function logout() {
-  if (confirm("هل تريد تسجيل الخروج من لوحة التحكم؟")) {
-    localStorage.removeItem('adminLoggedIn');
-    loginSection.style.display = 'block';
-    adminPanel.style.display = 'none';
-    document.getElementById('admin-pass').value = '';
-  }
-}
-
-/**
- * Load all data (orders and menu)
- */
-function loadData() {
-  loadOrders();
-  loadMenuList();
-}
-
-/**
- * Load orders with filtering capability
- */
-function loadOrders(filter = 'all') {
-  db.ref("orders").orderByChild("timestamp").on("value", snapshot => {
-    ordersContainer.innerHTML = '';
-    const orders = snapshot.val();
+  try {
+    const html5QrCode = new Html5Qrcode("scanner");
     
-    if (!orders) {
-      ordersContainer.innerHTML = `
-        <div class="empty-orders">
-          <i class="fas fa-clipboard"></i>
-          <p>لا توجد طلبات حالياً</p>
-        </div>
-      `;
-      return;
-    }
-    
-    const ordersArray = Object.entries(orders).reverse();
-    let hasOrders = false;
-    
-    ordersArray.forEach(([key, order]) => {
-      if (filter === 'all' || 
-          (filter === 'pending' && order.status !== 'completed') || 
-          (filter === 'completed' && order.status === 'completed')) {
-        
-        hasOrders = true;
-        const orderElement = createOrderElement(key, order);
-        ordersContainer.appendChild(orderElement);
+    // Function to find back camera
+    const getBackCamera = async () => {
+      const devices = await Html5Qrcode.getCameras();
+      for (const device of devices) {
+        if (device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('rear')) {
+          return device.id;
+        }
       }
-    });
+      // If no back camera found, use the last camera (usually back camera on single-camera devices)
+      return devices[devices.length - 1].id;
+    };
     
-    if (!hasOrders) {
-      ordersContainer.innerHTML = `
-        <div class="empty-orders">
-          <i class="fas fa-clipboard"></i>
-          <p>لا توجد طلبات ${filter === 'pending' ? 'قيد الانتظار' : 'مكتملة'}</p>
-        </div>
-      `;
-    }
-  });
+    const cameraId = await getBackCamera();
+    
+    await html5QrCode.start(
+      cameraId,
+      {
+        fps: 10,
+        qrbox: 250,
+        aspectRatio: 1.0,
+        disableFlip: false
+      },
+      (tableNumber) => {
+        // Scan success
+        isScannerActive = false;
+        html5QrCode.stop().then(() => {
+          console.log("QR Scanner stopped successfully");
+          handleTableScanned(tableNumber);
+        }).catch(err => {
+          console.error("Failed to stop scanner", err);
+          handleTableScanned(tableNumber);
+        });
+      },
+      (errorMessage) => {
+        // Scan error
+        console.error("QR Scanner error:", errorMessage);
+        document.querySelector('.fallback-input').style.display = 'block';
+      }
+    );
+    
+    scanner = html5QrCode;
+    isScannerActive = true;
+  } catch (error) {
+    console.error("Scanner initialization error:", error);
+    document.querySelector('.fallback-input').style.display = 'block';
+  }
 }
 
 /**
- * Create order element for display
+ * Handle scanned table number
  */
-function createOrderElement(key, order) {
-  const orderElement = document.createElement('div');
-  orderElement.className = `order-card ${order.status === 'completed' ? 'completed' : 'pending'}`;
+function handleTableScanned(tableNumber) {
+  if (!tableNumber || isNaN(tableNumber)) {
+    alert("باركود غير صالح، الرجاء المحاولة مرة أخرى");
+    return;
+  }
   
-  let itemsHTML = '';
-  let total = 0;
+  currentTable = tableNumber;
+  document.getElementById('table-input').style.display = 'none';
+  document.getElementById('menu').style.display = 'block';
+  document.getElementById('scanned-table-number').textContent = tableNumber;
   
-  order.items.forEach(item => {
-    const itemTotal = item.price * item.qty;
-    total += itemTotal;
-    
-    // Add icon based on item type
-    let icon = '';
-    if (item.type === 'hot') {
-      icon = '<i class="fas fa-mug-hot"></i>';
-    } else if (item.type === 'cold') {
-      icon = '<i class="fas fa-glass-whiskey"></i>';
-    } else if (item.type === 'food') {
-      icon = '<i class="fas fa-utensils"></i>';
-    }
-    
-    itemsHTML += `
-      <div class="order-item">
-        <div class="item-name">${icon} ${item.name}</div>
-        <div class="item-details">
-          <span class="item-qty">${item.qty} ×</span>
-          <span class="item-price">${item.price} ج</span>
-          <span class="item-total">${itemTotal.toFixed(2)} ج</span>
-        </div>
-        ${item.note ? `<div class="item-note">${item.note}</div>` : ''}
-      </div>
-    `;
-  });
-  
-  orderElement.innerHTML = `
-    <div class="order-header">
-      <div class="order-meta">
-        <span class="order-id">#${key.substring(0, 6)}</span>
-        <span class="order-status ${order.status === 'completed' ? 'completed' : 'pending'}">
-          ${order.status === 'completed' ? 'مكتمل' : 'قيد الانتظار'}
-        </span>
-      </div>
-      <div class="order-title">
-        <i class="fas fa-table"></i> الطاولة: ${order.table}
-      </div>
-      <div class="order-time">${formatTime(order.timestamp)}</div>
-    </div>
-    
-    <div class="order-items">${itemsHTML}</div>
-    
-    <div class="order-footer">
-      <div class="order-total">المجموع: ${total.toFixed(2)} جنيه</div>
-      <div class="order-actions">
-        ${order.status !== 'completed' ? `
-          <button onclick="completeOrder('${key}')" class="btn-complete">
-            <i class="fas fa-check"></i> تم الانتهاء
-          </button>
-        ` : ''}
-        <button onclick="deleteOrder('${key}')" class="btn-delete">
-          <i class="fas fa-trash"></i> حذف
-        </button>
-      </div>
-    </div>
-  `;
-  
-  return orderElement;
+  loadMenu();
 }
 
 /**
- * Load menu items list
+ * Enter table number manually
  */
-function loadMenuList() {
+function enterTableManually() {
+  const table = document.getElementById('tableNumber').value;
+  if (table) {
+    handleTableScanned(table);
+  } else {
+    alert("الرجاء إدخال رقم الطاولة");
+  }
+}
+
+/**
+ * Load menu items from Firebase and display them in categorized sections
+ */
+function loadMenu() {
   db.ref("menu").on("value", snapshot => {
-    menuListContainer.innerHTML = '';
+    const itemsDiv = document.getElementById('menu-items');
+    itemsDiv.innerHTML = '';
     const items = snapshot.val();
     
-    if (!items) {
-      menuListContainer.innerHTML = `
+    if (!items || Object.keys(items).length === 0) {
+      itemsDiv.innerHTML = `
         <div class="empty-menu">
           <i class="fas fa-utensils"></i>
-          <p>لا توجد أصناف في القائمة</p>
+          <p>لا توجد أصناف متاحة حالياً</p>
         </div>
       `;
       return;
     }
-    
-    // Create categorized sections
+
+    // Create hot drinks section
     const hotDiv = document.createElement('div');
     hotDiv.className = 'menu-section';
     hotDiv.innerHTML = '<h3 class="section-title"><i class="fas fa-mug-hot"></i> المشروبات الساخنة</h3>';
     const hotItemsContainer = document.createElement('div');
-    hotItemsContainer.className = 'menu-items-grid';
+    hotItemsContainer.className = 'menu-items-container';
     hotDiv.appendChild(hotItemsContainer);
 
+    // Create cold drinks section
     const coldDiv = document.createElement('div');
     coldDiv.className = 'menu-section';
     coldDiv.innerHTML = '<h3 class="section-title"><i class="fas fa-glass-whiskey"></i> المشروبات الباردة</h3>';
     const coldItemsContainer = document.createElement('div');
-    coldItemsContainer.className = 'menu-items-grid';
+    coldItemsContainer.className = 'menu-items-container';
     coldDiv.appendChild(coldItemsContainer);
 
+    // Create food section
     const foodDiv = document.createElement('div');
     foodDiv.className = 'menu-section';
     foodDiv.innerHTML = '<h3 class="section-title"><i class="fas fa-utensils"></i> المأكولات</h3>';
     const foodItemsContainer = document.createElement('div');
-    foodItemsContainer.className = 'menu-items-grid';
+    foodItemsContainer.className = 'menu-items-container';
     foodDiv.appendChild(foodItemsContainer);
 
-    for (const [key, item] of Object.entries(items)) {
-      const itemElement = createMenuItemElement(key, item);
-      
-      // Categorize items
+    for (let key in items) {
+      const item = items[key];
+      const itemElement = document.createElement('div');
+      itemElement.className = 'menu-item';
+      itemElement.innerHTML = `
+        <div class="item-info">
+          <h3>${item.name}</h3>
+          <div class="item-price">${item.price} جنيه</div>
+        </div>
+        <div class="item-controls">
+          <div class="quantity-selector">
+            <button onclick="decrementQuantity('${key}')" class="qty-btn">
+              <i class="fas fa-minus"></i>
+            </button>
+            <span id="qty-value-${key}" class="qty-value">0</span>
+            <button onclick="incrementQuantity('${key}')" class="qty-btn">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+          <textarea id="note-${key}" class="item-note" placeholder="ملاحظات خاصة"></textarea>
+        </div>
+      `;
+
+      // Categorize items by type
       if (item.type === 'hot') {
         hotItemsContainer.appendChild(itemElement);
       } else if (item.type === 'cold') {
@@ -231,23 +179,23 @@ function loadMenuList() {
 
     // Add sections only if they contain items
     if (hotItemsContainer.children.length > 0) {
-      menuListContainer.appendChild(hotDiv);
+      itemsDiv.appendChild(hotDiv);
     }
     if (coldItemsContainer.children.length > 0) {
-      menuListContainer.appendChild(coldDiv);
+      itemsDiv.appendChild(coldDiv);
     }
     if (foodItemsContainer.children.length > 0) {
-      menuListContainer.appendChild(foodDiv);
+      itemsDiv.appendChild(foodDiv);
     }
 
     // Show empty message if no items
     if (hotItemsContainer.children.length === 0 && 
         coldItemsContainer.children.length === 0 && 
         foodItemsContainer.children.length === 0) {
-      menuListContainer.innerHTML = `
+      itemsDiv.innerHTML = `
         <div class="empty-menu">
           <i class="fas fa-utensils"></i>
-          <p>لا توجد أصناف في القائمة</p>
+          <p>لا توجد أصناف متاحة حالياً</p>
         </div>
       `;
     }
@@ -255,167 +203,169 @@ function loadMenuList() {
 }
 
 /**
- * Create menu item element for display
+ * Increase item quantity
  */
-function createMenuItemElement(key, item) {
-  const itemElement = document.createElement('div');
-  itemElement.className = 'menu-item';
-  
-  // Set icon based on item type
-  let icon = '';
-  if (item.type === 'hot') {
-    icon = '<i class="fas fa-mug-hot"></i>';
-  } else if (item.type === 'cold') {
-    icon = '<i class="fas fa-glass-whiskey"></i>';
-  } else if (item.type === 'food') {
-    icon = '<i class="fas fa-utensils"></i>';
-  }
-  
-  itemElement.innerHTML = `
-    <div class="menu-item-info">
-      <div class="item-name">${icon} ${item.name}</div>
-      <div class="item-price">${item.price} جنيه</div>
-    </div>
-    <button onclick="deleteMenuItem('${key}')" class="btn-delete">
-      <i class="fas fa-trash"></i>
-    </button>
-  `;
-  
-  return itemElement;
+function incrementQuantity(itemId) {
+  const qtyElement = document.getElementById(`qty-value-${itemId}`);
+  let currentQty = parseInt(qtyElement.textContent) || 0;
+  qtyElement.textContent = currentQty + 1;
 }
 
 /**
- * Add new menu item
+ * Decrease item quantity
  */
-function addMenuItem() {
-  const name = document.getElementById('newItem').value.trim();
-  const price = document.getElementById('newPrice').value;
-  const type = document.getElementById('itemType').value;
-  
-  if (!name || !price) {
-    alert("الرجاء إدخال اسم الصنف والسعر");
-    return;
-  }
-  
-  if (isNaN(price) || parseFloat(price) <= 0) {
-    alert("السعر يجب أن يكون رقماً موجباً");
-    return;
-  }
-  
-  db.ref("menu").push({
-    name: name,
-    price: parseFloat(price).toFixed(2),
-    type: type
-  }).then(() => {
-    document.getElementById('newItem').value = '';
-    document.getElementById('newPrice').value = '';
-    document.getElementById('newItem').focus();
-  }).catch(error => {
-    console.error("Error adding menu item:", error);
-    alert("حدث خطأ أثناء إضافة الصنف، الرجاء المحاولة مرة أخرى");
-  });
-}
-
-/**
- * Mark order as completed
- */
-function completeOrder(orderId) {
-  if (confirm("هل تريد تمييز هذا الطلب كمكتمل؟")) {
-    db.ref(`orders/${orderId}`).update({
-      status: "completed",
-      completedAt: firebase.database.ServerValue.TIMESTAMP
-    }).catch(error => {
-      console.error("Error completing order:", error);
-      alert("حدث خطأ أثناء تحديث حالة الطلب");
-    });
+function decrementQuantity(itemId) {
+  const qtyElement = document.getElementById(`qty-value-${itemId}`);
+  let currentQty = parseInt(qtyElement.textContent) || 0;
+  if (currentQty > 0) {
+    qtyElement.textContent = currentQty - 1;
   }
 }
 
 /**
- * Delete order
+ * Submit order to Firebase
  */
-function deleteOrder(orderId) {
-  if (confirm("هل أنت متأكد من حذف هذا الطلب؟")) {
-    db.ref(`orders/${orderId}`).remove()
-      .catch(error => {
-        console.error("Error deleting order:", error);
-        alert("حدث خطأ أثناء حذف الطلب");
-      });
-  }
-}
-
-/**
- * Delete all completed orders
- */
-function clearCompleted() {
-  if (confirm("هل تريد حذف جميع الطلبات المكتملة؟ هذا الإجراء لا يمكن التراجع عنه.")) {
-    db.ref("orders").once("value").then(snapshot => {
-      const orders = snapshot.val();
-      const updates = {};
-      
-      for (const [key, order] of Object.entries(orders)) {
-        if (order.status === "completed") {
-          updates[key] = null;
-        }
-      }
-      
-      db.ref("orders").update(updates)
-        .catch(error => {
-          console.error("Error clearing completed orders:", error);
-          alert("حدث خطأ أثناء حذف الطلبات المكتملة");
+function submitOrder() {
+  const order = { 
+    table: currentTable, 
+    items: [],
+    status: "pending",
+    timestamp: firebase.database.ServerValue.TIMESTAMP
+  };
+  
+  db.ref("menu").once("value").then(snapshot => {
+    const items = snapshot.val();
+    let hasItems = false;
+    
+    for (let key in items) {
+      const qty = parseInt(document.getElementById(`qty-value-${key}`).textContent) || 0;
+      const note = document.getElementById(`note-${key}`).value;
+      if (qty > 0) {
+        hasItems = true;
+        order.items.push({
+          name: items[key].name,
+          price: items[key].price,
+          qty: qty,
+          note: note,
+          type: items[key].type
         });
-    });
-  }
-}
-
-/**
- * Delete menu item
- */
-function deleteMenuItem(itemId) {
-  if (confirm("هل أنت متأكد من حذف هذا الصنف من القائمة؟")) {
-    db.ref(`menu/${itemId}`).remove()
+      }
+    }
+    
+    if (!hasItems) {
+      alert("الرجاء إضافة كمية لعنصر واحد على الأقل");
+      return;
+    }
+    
+    db.ref("orders").push(order)
+      .then(() => {
+        showOrderSummary(order);
+      })
       .catch(error => {
-        console.error("Error deleting menu item:", error);
-        alert("حدث خطأ أثناء حذف الصنف");
+        console.error("Error submitting order:", error);
+        alert("حدث خطأ أثناء إرسال الطلب، الرجاء المحاولة مرة أخرى");
       });
+  });
+}
+
+/**
+ * Display order summary
+ */
+function showOrderSummary(order) {
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('summary-table').textContent = order.table;
+  
+  const itemsDiv = document.getElementById('summary-items');
+  itemsDiv.innerHTML = '<strong>تفاصيل الطلب:</strong><br><br>';
+  
+  let total = 0;
+  order.items.forEach(item => {
+    const itemTotal = item.price * item.qty;
+    total += itemTotal;
+    itemsDiv.innerHTML += `
+      <div class="summary-item">
+        ${item.qty} × ${item.name} - ${itemTotal.toFixed(2)} جنيه
+        ${item.note ? `<div class="summary-note">ملاحظات: ${item.note}</div>` : ''}
+      </div>
+    `;
+  });
+  
+  itemsDiv.innerHTML += `<br><div class="summary-total">المجموع: ${total.toFixed(2)} جنيه</div>`;
+  
+  document.getElementById('order-summary').style.display = 'block';
+}
+
+/**
+ * Go back to table scanning
+ */
+function goBack() {
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('table-input').style.display = 'block';
+  document.querySelector('.fallback-input').style.display = 'none';
+  currentTable = null;
+  
+  if (scanner) {
+    scanner.stop().then(() => {
+      console.log("Scanner stopped successfully");
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
+    }).catch(error => {
+      console.error("Failed to stop scanner", error);
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
+    });
+  } else {
+    initializeScanner();
   }
 }
 
 /**
- * Filter orders by status
+ * Start a new order
  */
-function filterOrders(type) {
-  // Update filter UI
-  document.querySelectorAll('.filter-tab').forEach(tab => {
-    tab.classList.remove('active');
-  });
-  event.target.classList.add('active');
+function newOrder() {
+  document.getElementById('order-summary').style.display = 'none';
+  document.getElementById('table-input').style.display = 'block';
+  currentTable = null;
   
-  // Load filtered orders
-  loadOrders(type);
+  if (scanner) {
+    scanner.stop().then(() => {
+      console.log("Scanner stopped successfully");
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
+    }).catch(error => {
+      console.error("Failed to stop scanner", error);
+      scanner.clear();
+      scanner = null;
+      isScannerActive = false;
+      initializeScanner();
+    });
+  } else {
+    initializeScanner();
+  }
 }
 
-/**
- * Format timestamp to readable date/time
- */
-function formatTime(timestamp) {
-  if (!timestamp) return '';
-  const date = new Date(timestamp);
-  return date.toLocaleString('ar-EG', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+// Initialize scanner when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  initializeScanner();
+  
+  // Add event listener for manual table input
+  document.getElementById('tableNumber').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      enterTableManually();
+    }
   });
-}
+});
 
 // Export functions for HTML access
-window.login = login;
-window.logout = logout;
-window.addMenuItem = addMenuItem;
-window.deleteMenuItem = deleteMenuItem;
-window.deleteOrder = deleteOrder;
-window.completeOrder = completeOrder;
-window.filterOrders = filterOrders;
-window.clearCompleted = clearCompleted;
+window.enterTableManually = enterTableManually;
+window.goBack = goBack;
+window.newOrder = newOrder;
+window.incrementQuantity = incrementQuantity;
+window.decrementQuantity = decrementQuantity;
+window.submitOrder = submitOrder;
