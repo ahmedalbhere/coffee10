@@ -304,21 +304,32 @@ function renderMenuItems(items) {
 
 // إعداد عناصر التحكم بالكمية
 function setupQuantityControls() {
-  menuItemsContainer.addEventListener('click', (e) => {
-    const minusBtn = e.target.closest('.minus-btn');
-    const plusBtn = e.target.closest('.plus-btn');
-    
-    if (!minusBtn && !plusBtn) return;
-    
-    const qtyElement = e.target.closest('.quantity-selector').querySelector('.qty-value');
-    let currentQty = parseInt(qtyElement.textContent) || 0;
-    
-    if (minusBtn && currentQty > 0) {
+  // إضافة معالج الأحداث بشكل صحيح لمنع التكرار
+  menuItemsContainer.removeEventListener('click', handleQuantityClick);
+  menuItemsContainer.addEventListener('click', handleQuantityClick);
+}
+
+function handleQuantityClick(e) {
+  const minusBtn = e.target.closest('.minus-btn');
+  const plusBtn = e.target.closest('.plus-btn');
+  
+  if (!minusBtn && !plusBtn) return;
+  
+  // منع السلوك الافتراضي لمنع التكرار
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const quantitySelector = e.target.closest('.quantity-selector');
+  const qtyElement = quantitySelector.querySelector('.qty-value');
+  let currentQty = parseInt(qtyElement.textContent) || 0;
+  
+  if (minusBtn) {
+    if (currentQty > 0) {
       qtyElement.textContent = currentQty - 1;
-    } else if (plusBtn) {
-      qtyElement.textContent = currentQty + 1;
     }
-  });
+  } else if (plusBtn) {
+    qtyElement.textContent = currentQty + 1;
+  }
 }
 
 // جمع عناصر الطلب
