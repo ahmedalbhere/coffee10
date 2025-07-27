@@ -13,6 +13,7 @@ let isScannerActive = false;
 let isFlashOn = false;
 let currentCameraId = null;
 const SCANNER_RETRY_DELAY = 30000; // 30 ثانية لإعادة المحاولة
+const VALID_TABLE_NUMBER_REGEX = /^\d{1,3}$/; // يسمح فقط بأرقام الطاولات من 1-3 أرقام
 
 // عناصر واجهة المستخدم
 const tableInputSection = document.getElementById('table-input');
@@ -57,6 +58,7 @@ async function initializeScanner() {
       Html5QrcodeSupportedFormats.CODE_93,
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.QR_CODE,
       Html5QrcodeSupportedFormats.AZTEC,
       Html5QrcodeSupportedFormats.DATA_MATRIX,
       Html5QrcodeSupportedFormats.PDF_417
@@ -141,6 +143,7 @@ async function checkFlashSupport() {
     const capabilities = await html5QrCode.getRunningTrackCapabilities();
     if (capabilities.torch) {
       flashToggle.style.display = 'flex';
+      flashToggle.innerHTML = `<i class="fas fa-bolt"></i>`; // أيقونة الفلاش الصحيحة
     } else {
       flashToggle.style.display = 'none';
     }
@@ -162,7 +165,9 @@ async function toggleFlash() {
     });
     
     flashToggle.classList.toggle('active', isFlashOn);
-    flashToggle.innerHTML = `<i class="fas fa-lightbulb"></i>`;
+    flashToggle.innerHTML = isFlashOn 
+      ? `<i class="fas fa-bolt"></i>` 
+      : `<i class="fas fa-bolt"></i>`;
   } catch (error) {
     console.error("Error toggling flash:", error);
     isFlashOn = !isFlashOn; // التراجع عن التغيير
@@ -172,6 +177,12 @@ async function toggleFlash() {
 // معالجة مسح الباركود بنجاح
 async function handleScanSuccess(decodedText) {
   try {
+    // تجاهل أي كود QR غير صالح لرقم الطاولة
+    if (!VALID_TABLE_NUMBER_REGEX.test(decodedText)) {
+      console.log("تم تجاهل كود غير صالح:", decodedText);
+      return; // تجاهل الكود تماماً
+    }
+    
     await html5QrCode.pause();
     handleTableScanned(decodedText);
   } catch (error) {
@@ -199,9 +210,9 @@ function handleScanError(error) {
 function handleTableScanned(tableNumber) {
   tableNumber = tableNumber.trim();
   
-  // التحقق من صحة رقم الطاولة
-  if (!tableNumber || isNaN(tableNumber)) {
-    alert("");
+  // التحقق من صحة رقم الطاولة باستخدام regex
+  if (!VALID_TABLE_NUMBER_REGEX.test(tableNumber)) {
+    alert("الرجاء مسح باركود صالح لرقم الطاولة");
     html5QrCode.resume().catch(console.error);
     return;
   }
@@ -423,8 +434,8 @@ async function resetScanner() {
 function enterTableManually() {
   const tableNumber = tableNumberInput.value.trim();
   
-  if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء إدخال رقم طاولة صحيح");
+  if (!VALID_TABLE_NUMBER_REGEX.test(tableNumber)) {
+    alert("الرجاء إدخال رقم طاولة صحيح (1-3 أرقام)");
     return;
   }
   
