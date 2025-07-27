@@ -57,7 +57,6 @@ async function initializeScanner() {
       Html5QrcodeSupportedFormats.CODE_93,
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.QR_CODE,
       Html5QrcodeSupportedFormats.AZTEC,
       Html5QrcodeSupportedFormats.DATA_MATRIX,
       Html5QrcodeSupportedFormats.PDF_417
