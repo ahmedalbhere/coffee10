@@ -201,7 +201,7 @@ function handleTableScanned(tableNumber) {
   
   // التحقق من صحة رقم الطاولة
   if (!tableNumber || isNaN(tableNumber)) {
-    alert("الرجاء مسح باركود صالح");
+    alert("");
     html5QrCode.resume().catch(console.error);
     return;
   }
