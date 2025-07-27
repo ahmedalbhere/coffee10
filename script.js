@@ -27,7 +27,7 @@ function initializeScanner() {
   }
 
   try {
-    // إنشاء مثيل جديد للماسح
+    // إنشاء مثيل جديد للماسح مع تحديد صيغ الباركود فقط
     scanner = new Html5QrcodeScanner(
       "scanner",
       {
@@ -40,7 +40,8 @@ function initializeScanner() {
         formatsToSupport: [
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.UPC_A
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.CODE_39
         ] // دعم صيغ الباركود الشائعة فقط
       },
       /* verbose= */ false
@@ -135,7 +136,6 @@ function handleTableScanned(tableNumber) {
 }
 
 // باقي الدوال تبقى كما هي دون تغيير (loadMenu, renderMenuItems, setupQuantityControls, submitOrder, ...)
-// [يجب الحفاظ على جميع الدوال الأخرى كما هي في الكود الأصلي]
 
 // تهيئة الصفحة مع تحسينات
 document.addEventListener('DOMContentLoaded', () => {
